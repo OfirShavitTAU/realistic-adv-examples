@@ -20,7 +20,7 @@ from .validation import PlanError
     @type argv: list or None
     @param argv: Optional arguments; None uses the command-line arguments.
 """
-def main(argv=None):
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="config.json",
                         help="Absolute path or path relative to the study directory (not the working directory).")

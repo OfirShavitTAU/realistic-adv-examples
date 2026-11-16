@@ -15,7 +15,7 @@ class PlanError(ValueError):
     @param message: The error message for invalid input.
     @raises PlanError: If the condition is false.
 """
-def require(condition, message):
+def require(condition: object, message: str) -> None:
     if not condition:
         raise PlanError(message)
 
@@ -28,7 +28,7 @@ def require(condition, message):
     @returns: The validated name.
     @raises PlanError: If the name contains a path or invalid characters.
 """
-def folder_name(value):
+def folder_name(value: str) -> str:
     valid_name = isinstance(value, str) and value not in {"", ".", ".."}
     require(valid_name, "Invalid folder name.")
 

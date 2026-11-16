@@ -7,6 +7,7 @@ This directory contains our experiment layer. The original `src` and `main.py` a
 - `run.py`: command-line entry point that connects the planning steps.
 - `configuration.py`: study directory and JSON configuration validation.
 - `validation.py`: shared validation helpers and `PlanError`.
+- `study_types.py`: shared type hints for configuration, jobs, and preview entries.
 - `images.py`: image validation and path formatting.
 - `planner.py`: source/initialization pairing and planned output paths.
 - `display.py`: terminal output for the plan.

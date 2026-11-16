@@ -1,6 +1,9 @@
 """Display study settings and planned jobs in the terminal."""
 
 import json
+from pathlib import Path
+
+from .study_types import PlannedJob, SelectedGroup, StudyConfig
 
 
 ################## PLAN DISPLAY ##################
@@ -20,7 +23,10 @@ import json
     @type run_dir: Path
     @param run_dir: A preview of the future output directory; it is not created.
 """
-def print_plan(config, selected, jobs, warnings, config_path, run_dir):
+def print_plan(
+    config: StudyConfig, selected: list[SelectedGroup], jobs: list[PlannedJob],
+    warnings: list[str], config_path: Path, run_dir: Path
+) -> None:
     print("PLAN ONLY - no model, attacks, or output directories are created.")
     print("Config: " + str(config_path.resolve()))
     print("Future output: " + str(run_dir))

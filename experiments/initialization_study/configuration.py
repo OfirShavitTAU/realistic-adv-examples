@@ -2,7 +2,9 @@
 
 import json
 from pathlib import Path
+from typing import Literal
 
+from .study_types import AttackConfig, GroupConfig, ImageRole, SelectedGroup, StudyConfig
 from .validation import folder_name, require
 
 
@@ -15,13 +17,13 @@ STUDY_DIR = Path(__file__).resolve().parent
     Reads the configuration and validates its groups and attack settings.
     @type path: Path
     @param path: The path to the JSON configuration file.
-    @rtype: (dict, list)
+    @rtype: (StudyConfig, list[SelectedGroup])
     @returns: The configuration and a list of (family, group) pairs.
     @raises PlanError: If the configuration structure or settings are invalid.
 """
-def read_config(path):
+def read_config(path: Path) -> tuple[StudyConfig, list[SelectedGroup]]:
     with path.open(encoding="utf-8-sig") as stream:
-        config = json.load(stream)
+        config: StudyConfig = json.load(stream)
 
     require(isinstance(config, dict), "Configuration must be a JSON object.")
     require(set(config) == {"groups", "random_baseline", "attack"},
@@ -37,17 +39,17 @@ def read_config(path):
 """
     Validates group names, family names, and image path lists.
     Image files themselves are checked later by read_images.
-    @type groups: dict
+    @type groups: dict[str, GroupConfig]
     @param groups: The group definitions from the configuration.
     @rtype: list
     @returns: The (family, group) pairs in configuration order.
     @raises PlanError: If a group is invalid or its output path is repeated.
 """
-def validate_groups(groups):
+def validate_groups(groups: dict[str, GroupConfig]) -> list[SelectedGroup]:
     require(isinstance(groups, dict) and groups, "groups must contain at least one group.")
 
-    selected = []
-    seen = set()
+    selected: list[SelectedGroup] = []
+    seen: set[SelectedGroup] = set()
 
     for group, settings in groups.items():
         folder_name(group)
@@ -59,7 +61,9 @@ def validate_groups(groups):
         require(key not in seen, "Repeated Windows group path: " + family + "/" + group)
         seen.add(key)
 
-        for role in ("source", "initializations"):
+        roles: tuple[ImageRole, ImageRole] = ("source", "initializations")
+
+        for role in roles:
             paths = settings[role]
             require(isinstance(paths, list) and paths and
                     all(isinstance(path, str) and path.strip() for path in paths),
@@ -72,11 +76,11 @@ def validate_groups(groups):
 
 """
     Checks the attack name, norms, seeds, and positive budgets.
-    @type attack: dict
+    @type attack: AttackConfig
     @param attack: The attack settings from the configuration.
     @raises PlanError: If a required setting is missing or invalid.
 """
-def validate_attack(attack):
+def validate_attack(attack: AttackConfig) -> None:
     expected = {"name", "norms", "seeds", "max_queries", "max_unsafe_queries", "max_iterations"}
     require(isinstance(attack, dict) and set(attack) == expected, "Unexpected or missing attack settings.")
     require(attack["name"] == "hsja", "This study currently plans HSJA only.")
@@ -93,5 +97,9 @@ def validate_attack(attack):
     require(valid_seeds, "seeds must contain integers in [0, 2**32).")
     require(len(set(seeds)) == len(seeds), "Duplicate seeds.")
 
-    for key in ("max_queries", "max_unsafe_queries", "max_iterations"):
+    budget_keys: tuple[Literal["max_queries", "max_unsafe_queries", "max_iterations"], ...] = (
+        "max_queries", "max_unsafe_queries", "max_iterations"
+    )
+
+    for key in budget_keys:
         require(type(attack[key]) is int and attack[key] > 0, key + " must be a positive integer.")

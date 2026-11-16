@@ -11,6 +11,7 @@ from torchvision import transforms
 
 from .configuration import STUDY_DIR, read_config
 from .images import read_images
+from .study_types import ImageRole, PreviewEntry, SelectedGroup, StudyConfig
 from .validation import PlanError
 
 
@@ -25,13 +26,15 @@ from .validation import PlanError
     @rtype: list
     @returns: Tuples of (family, group, role, image path), in configuration order.
 """
-def collect_images(config, selected):
-    entries = []
+def collect_images(config: StudyConfig, selected: list[SelectedGroup]) -> list[PreviewEntry]:
+    entries: list[PreviewEntry] = []
 
     for family, group in selected:
         settings = config["groups"][group]
 
-        for role in ("source", "initializations"):
+        roles: tuple[ImageRole, ImageRole] = ("source", "initializations")
+
+        for role in roles:
             paths = read_images(settings[role], STUDY_DIR, group + "." + role)
 
             for path in paths:
@@ -52,7 +55,7 @@ def collect_images(config, selected):
     @rtype: PIL.Image.Image
     @returns: A labeled comparison image with the original on the left.
 """
-def create_comparison(original, processed):
+def create_comparison(original: Image.Image, processed: Image.Image) -> Image.Image:
     original_display = original.copy()
     original_display.thumbnail((512, 512))
 
@@ -89,7 +92,7 @@ def create_comparison(original, processed):
     @param output_dir: The new preview directory to create.
     @returns: None. Prints the input filename and comparison path for each entry.
 """
-def save_previews(entries, output_dir):
+def save_previews(entries: list[PreviewEntry], output_dir: Path) -> None:
     spatial_transform = transforms.Compose([
         transforms.Resize(256),
         transforms.CenterCrop(224),
@@ -121,7 +124,7 @@ def save_previews(entries, output_dir):
     @type argv: list or None
     @param argv: Optional arguments; None uses the command-line arguments.
 """
-def main(argv=None):
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="config.json",
                         help="Absolute path or path relative to the study directory.")

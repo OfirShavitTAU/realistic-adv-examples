@@ -24,8 +24,8 @@ IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".jfif", ".png", ".bmp", ".webp"}
     @returns: The absolute paths of the validated images.
     @raises PlanError: If images are missing, corrupt, or have conflicting stems.
 """
-def read_images(paths, study_dir, context):
-    images = []
+def read_images(paths: list[str], study_dir: Path, context: str) -> list[Path]:
+    images: list[Path] = []
 
     for value in paths:
         path = Path(value)
@@ -64,7 +64,7 @@ def read_images(paths, study_dir, context):
     @rtype: str
     @returns: A relative path inside the study, otherwise an absolute path.
 """
-def image_path(path, study_dir):
+def image_path(path: Path, study_dir: Path) -> str:
     try:
         return path.relative_to(study_dir.resolve()).as_posix()
     except ValueError:

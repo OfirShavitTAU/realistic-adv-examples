@@ -4,6 +4,7 @@ from pathlib import Path
 
 from .configuration import STUDY_DIR
 from .images import image_path, read_images
+from .study_types import InitializationMode, PlannedJob, SelectedGroup, StudyConfig
 from .validation import PlanError, require
 
 
@@ -21,10 +22,12 @@ from .validation import PlanError, require
     @returns: The planned jobs and warnings about identical image contents.
     @raises PlanError: If any group contains invalid images.
 """
-def build_plan(config, selected, study_dir=STUDY_DIR):
-    jobs = []
-    errors = []
-    warnings = []
+def build_plan(
+    config: StudyConfig, selected: list[SelectedGroup], study_dir: Path = STUDY_DIR
+) -> tuple[list[PlannedJob], list[str]]:
+    jobs: list[PlannedJob] = []
+    errors: list[str] = []
+    warnings: list[str] = []
 
     # Validate each group before adding its jobs to the complete plan.
     for family, group in selected:
@@ -66,9 +69,12 @@ def build_plan(config, selected, study_dir=STUDY_DIR):
     @rtype: (list, list)
     @returns: The jobs for this group and warnings about identical images.
 """
-def build_group_jobs(config, family, group, sources, initializations, study_dir):
-    jobs = []
-    warnings = []
+def build_group_jobs(
+    config: StudyConfig, family: str, group: str, sources: list[Path],
+    initializations: list[Path], study_dir: Path
+) -> tuple[list[PlannedJob], list[str]]:
+    jobs: list[PlannedJob] = []
+    warnings: list[str] = []
 
     for source in sources:
         for initialization in initializations:
@@ -76,7 +82,9 @@ def build_group_jobs(config, family, group, sources, initializations, study_dir)
                 warnings.append("Identical source and initialization: " + str(source) + " / " + str(initialization))
 
         # None keeps the original random initialization separate from image inputs.
-        choices = [("image", path) for path in initializations]
+        choices: list[tuple[InitializationMode, Path | None]] = [
+            ("image", path) for path in initializations
+        ]
         if config["random_baseline"]:
             choices.append(("random", None))
 
