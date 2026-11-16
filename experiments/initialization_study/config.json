@@ -1,0 +1,16 @@
+{
+  "experiment_groups": {
+    "dogs": {
+      "group_1": true
+    }
+  },
+  "random_baseline": true,
+  "attack": {
+    "name": "hsja",
+    "norms": ["l2"],
+    "seeds": [0],
+    "max_queries": 2000,
+    "max_unsafe_queries": 1000,
+    "max_iterations": 10
+  }
+}
