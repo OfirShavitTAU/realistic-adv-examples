@@ -2,6 +2,15 @@
 
 This directory contains our experiment layer. The original `src` and `main.py` are unchanged.
 
+## Code structure
+
+- `run.py`: command-line entry point that connects the planning steps.
+- `configuration.py`: study directory and JSON configuration validation.
+- `validation.py`: shared validation helpers and `PlanError`.
+- `images.py`: image validation and path formatting.
+- `planner.py`: source/initialization pairing and planned output paths.
+- `display.py`: terminal output for the plan.
+
 ## Current stage: plan only
 
 Run from the repository root, using the repository's virtual environment:
