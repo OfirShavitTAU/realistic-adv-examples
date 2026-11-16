@@ -6,8 +6,8 @@ This directory contains our experiment layer. The original `src` and `main.py` a
 
 Run from the repository root, using the repository's virtual environment:
 
-```powershell
-.\venv\Scripts\python.exe -m experiments.initialization_study.run
+```bash
+.venv/bin/python -m experiments.initialization_study.run
 ```
 
 This validates the JSON settings, decodes the selected images, and lists every planned
@@ -15,31 +15,45 @@ source/initialization pair plus one random baseline per source, norm, and seed.
 It does **not** import PyTorch, download weights, run attacks, or create results.
 Pillow is used to verify images and is already a dependency of the existing environment.
 
-Edit `config.json`: `experiment_groups` mirrors the folder hierarchy. Each family
-contains group names with `true` (selected) or `false` (disabled). Unlisted groups
-are not selected. For example, add `"group_2": true` inside `"dogs"` to select it.
-The default budgets are small pilot settings, not the paper's full evaluation budgets.
+Edit `config.json`: `groups` defines the groups directly, with a `family`, a
+nonempty `source` list, and a nonempty `initializations` list of image paths:
 
-Each selected group must contain image files directly in both directories:
-
-```text
-experiment_groups/<family>/<group>/source/
-experiment_groups/<family>/<group>/initializations/
+```json
+{
+  "groups": {
+    "group_1": {
+      "family": "dogs",
+      "source": ["images/dogs/207_golden_retriever/ILSVRC2012_val_00034584.jfif"],
+      "initializations": ["images/dogs/208_labrador_retriever/ILSVRC2012_val_00019169.jfif"]
+    }
+  }
+}
 ```
+
+This snippet shows only the group definition; keep `random_baseline` and `attack`
+as in the complete `config.json`. The checked-in configuration contains example
+image selections, which you can replace with your intended study inputs.
+All listed groups are included. Add another entry such as `group_2` to define another
+group; remove an entry to exclude it. No `experiment_groups` directories or image
+copies are needed. The same image can be referenced in multiple groups.
+Relative image paths are resolved against this study directory, even when using
+an alternative config. Absolute image paths are also supported.
 
 Every source is paired with every initialization in its own group. Groups never
 cross-pair. Supported extensions: JPG, JPEG, JFIF, PNG, BMP, WEBP (case insensitive).
-Duplicate image stems in a directory are rejected to prevent output collisions.
-The stem `random` is reserved for the random baseline. Empty selected groups are errors.
+Duplicate image stems within either list of a group are rejected to prevent output
+collisions, even if the files are in different directories. The stem `random` is
+reserved for the random baseline. Missing or corrupt images are rejected.
+The default budgets are small pilot settings, not the paper's full evaluation budgets.
 
 Alternative configuration:
 
-```powershell
-.\venv\Scripts\python.exe -m experiments.initialization_study.run --config configs/pilot.json
+```bash
+.venv/bin/python -m experiments.initialization_study.run --config configs/pilot.json
 ```
 
-Relative configuration paths are resolved against this study directory. Images and
-results always use this study directory, regardless of the config file location.
+Relative configuration paths are resolved against this study directory. Relative image paths and
+results use this study directory, regardless of the config file location.
 For module imports, run the command from the repository root.
 
 ## Output contract for the execution stage

@@ -1,14 +1,25 @@
 {
-  "experiment_groups": {
-    "dogs": {
-      "group_1": true
+  "groups": {
+    "group_1": {
+      "family": "dogs",
+      "source": [
+        "images/dogs/207_golden_retriever/ILSVRC2012_val_00034584.jfif"
+      ],
+      "initializations": [
+        "images/dogs/208_labrador_retriever/ILSVRC2012_val_00019169.jfif",
+        "images/dogs/231_collie/ILSVRC2012_val_00009055.jfif"
+      ]
     }
   },
   "random_baseline": true,
   "attack": {
     "name": "hsja",
-    "norms": ["l2"],
-    "seeds": [0],
+    "norms": [
+      "l2"
+    ],
+    "seeds": [
+      0
+    ],
     "max_queries": 2000,
     "max_unsafe_queries": 1000,
     "max_iterations": 10
