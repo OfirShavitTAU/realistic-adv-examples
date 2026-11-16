@@ -2,10 +2,11 @@
 
 from pathlib import Path
 
-from .configuration import STUDY_DIR
-from .images import image_path, read_images
-from .study_types import InitializationMode, PlannedJob, SelectedGroup, StudyConfig
-from .validation import PlanError, require
+from ..configuration.loader import STUDY_DIR
+from ..inputs.images import image_path, read_images
+from ..configuration.schemas import SelectedGroup, StudyConfig
+from .schemas import InitializationMode, PlannedJob
+from ..validation import PlanError, require
 
 
 ################## EXPERIMENT PLAN ##################

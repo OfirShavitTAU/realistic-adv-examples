@@ -6,9 +6,9 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from .configuration import STUDY_DIR, read_config
-from .display import print_plan
-from .planner import build_plan
+from .configuration.loader import STUDY_DIR, read_config
+from .planning.display import print_plan
+from .planning.planner import build_plan
 from .validation import PlanError
 
 

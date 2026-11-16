@@ -1,5 +1,6 @@
 # Use Python 3.10, as in the original research project.
-# Dependencies for the current planner and preprocessing preview.
+# Dependencies for planning, preprocessing previews, and GPU-only preflight predictions.
+# Model inference requires a CUDA-enabled PyTorch installation and a compatible GPU driver.
 
 # Match the numerical and transform versions in the root requirements.txt.
 numpy~=1.23.3

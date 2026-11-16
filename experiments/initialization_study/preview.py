@@ -7,11 +7,12 @@ from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from PIL import Image, ImageDraw
-from torchvision import transforms
 
-from .configuration import STUDY_DIR, read_config
-from .images import read_images
-from .study_types import ImageRole, PreviewEntry, SelectedGroup, StudyConfig
+from .configuration.loader import STUDY_DIR, read_config
+from .inputs.images import read_images
+from .inputs.preprocessing import spatial_transforms
+from .configuration.schemas import ImageRole, SelectedGroup, StudyConfig
+from .inputs.schemas import PreviewEntry
 from .validation import PlanError
 
 
@@ -93,10 +94,7 @@ def create_comparison(original: Image.Image, processed: Image.Image) -> Image.Im
     @returns: None. Prints the input filename and comparison path for each entry.
 """
 def save_previews(entries: list[PreviewEntry], output_dir: Path) -> None:
-    spatial_transform = transforms.Compose([
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
-    ])
+    spatial_transform = spatial_transforms()
 
     # A new directory for each invocation keeps previous previews intact.
     output_dir.mkdir(parents=True, exist_ok=False)

@@ -4,11 +4,11 @@ import json
 from pathlib import Path
 from typing import Literal
 
-from .study_types import AttackConfig, GroupConfig, ImageRole, SelectedGroup, StudyConfig
-from .validation import folder_name, require
+from .schemas import AttackConfig, GroupConfig, ImageRole, SelectedGroup, StudyConfig
+from ..validation import folder_name, require
 
 
-STUDY_DIR = Path(__file__).resolve().parent
+STUDY_DIR = Path(__file__).resolve().parents[1]
 
 
 ################## CONFIGURATION ##################

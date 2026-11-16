@@ -3,7 +3,8 @@
 import json
 from pathlib import Path
 
-from .study_types import PlannedJob, SelectedGroup, StudyConfig
+from ..configuration.schemas import SelectedGroup, StudyConfig
+from .schemas import PlannedJob
 
 
 ################## PLAN DISPLAY ##################

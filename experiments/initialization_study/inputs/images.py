@@ -4,7 +4,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from .validation import PlanError, folder_name, require
+from ..validation import PlanError, folder_name, require
 
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".jfif", ".png", ".bmp", ".webp"}

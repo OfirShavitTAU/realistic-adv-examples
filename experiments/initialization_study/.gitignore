@@ -1,2 +1,5 @@
 # Generated image preprocessing comparisons
 previews/
+
+# GPU-only model preparation reports
+preflight_reports/
