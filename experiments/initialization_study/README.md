@@ -10,6 +10,26 @@ This directory contains our experiment layer. The original `src` and `main.py` a
 - `images.py`: image validation and path formatting.
 - `planner.py`: source/initialization pairing and planned output paths.
 - `display.py`: terminal output for the plan.
+- `preview.py`: optional original/preprocessed image comparisons.
+
+## Python environment
+
+Use Python 3.10, matching the original research environment. From the repository
+root, create a virtual environment if needed and install the study dependencies:
+
+```bash
+python3.10 -m venv .venv
+.venv/bin/python -m pip install -r experiments/initialization_study/requirements.txt
+```
+
+If `.venv` already exists with Python 3.10, use only the installation command.
+On Windows, use `py -3.10 -m venv .venv` and `.venv\Scripts\python.exe`.
+The study requirements cover the current planner and preprocessing preview:
+Pillow for images, torch/torchvision for transforms, NumPy compatible with the
+original project, and tzdata for Israel timestamps on systems without timezone data.
+The NumPy, torch, and torchvision constraints match the root requirements file.
+These study requirements do not replace the full research requirements for future
+attack execution; those dependencies will be added when the attack runner is implemented.
 
 ## Current stage: plan only
 
@@ -22,7 +42,7 @@ Run from the repository root, using the repository's virtual environment:
 This validates the JSON settings, decodes the selected images, and lists every planned
 source/initialization pair plus one random baseline per source, norm, and seed.
 It does **not** import PyTorch, download weights, run attacks, or create results.
-Pillow is used to verify images and is already a dependency of the existing environment.
+Pillow is used to verify images and is included in the study requirements.
 
 Edit `config.json`: `groups` defines the groups directly, with a `family`, a
 nonempty `source` list, and a nonempty `initializations` list of image paths:
@@ -64,6 +84,33 @@ Alternative configuration:
 Relative configuration paths are resolved against this study directory. Relative image paths and
 results use this study directory, regardless of the config file location.
 For module imports, run the command from the repository root.
+
+## Image preprocessing preview
+
+To generate comparisons explicitly, run from the repository root:
+
+```bash
+.venv/bin/python -m experiments.initialization_study.preview
+```
+
+Use `--config configs/pilot.json` for an alternative configuration, resolved against
+this study directory just like the planner. The command validates all configured
+source and initialization images, then saves one comparison per entry under:
+
+```text
+previews/preview-<Israel timestamp>/<family>/<group>/<source or initializations>/<image stem>-preview.png
+```
+
+The filename identifies the input image. Each comparison shows the full original
+on the left (reduced to fit within 512x512 for display) and the actual 224x224 crop
+on the right. The right side uses torchvision `Resize(256)` and `CenterCrop(224)`,
+as in `src/dataset.py`, after RGB conversion as used by the default ImageFolder
+PIL loader. No tensor conversion or normalization is needed for this visual preview.
+The preview command imports torchvision/PyTorch for transforms but loads no model,
+downloads no weights, computes no predictions, and runs no attacks. No GPU is needed.
+Original files are never modified. Each invocation creates a separate directory;
+if saving fails partway through, that directory may contain partial output.
+The planner command is unchanged and does not generate previews.
 
 ## Output contract for the execution stage
 
