@@ -613,3 +613,6 @@ queries_table.csv
 ablations_improvements.ipynb
 ablations_raw_numbers.csv
 plots.sh
+
+logs/
+experiments/initialization_study/previews/
