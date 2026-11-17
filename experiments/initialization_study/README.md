@@ -443,3 +443,40 @@ directories only; they do not execute a real model or HSJA:
 ```bash
 .venv/bin/python -m unittest discover -s experiments/initialization_study/tests
 ```
+
+
+## Opt-in real CPU E2E
+
+`tests/e2e/e2e.json` defines one golden-retriever source, one Labrador initialization,
+L2, seed 0, one HSJA iteration, and query budgets of 100. Random baseline is disabled.
+The researchers' budgets are checked at iteration boundaries, so these are not hard
+query limits and do not guarantee a short runtime.
+
+To run the real test, execute `tests/e2e/test_e2e.py` as a Python script in PyCharm
+or run:
+
+```bash
+.venv/bin/python experiments/initialization_study/tests/e2e/test_e2e.py
+```
+
+The test starts the public experiment command in a separate Python process with
+`--config <the E2E fixture> --execute --cpu`. It may download the V1 weights on first
+use. It has a 600-second process timeout and retains normal experiment artifacts in
+`results/experiment-<timestamp>` for inspection, including when assertions fail.
+A process timeout may leave partial output.
+
+It requires one completed task, CPU metadata, a summary row, a display PNG, exact
+output/input tensors, and recorded query history. A skipped source or initialization
+fails the test because it does not exercise the attack path. Independent final
+attack-success/distance verification remains pending; this test checks end-to-end
+execution and output storage.
+
+The `e2e` directory deliberately has no package marker so ordinary unittest discovery
+does not recurse into it. Import-based test collection also skips the test unless
+`RUN_INITIALIZATION_E2E=1` is explicitly set. If PyCharm selects a unittest run
+configuration for this file, add that environment variable to enable the real test.
+For explicit unittest execution:
+
+```bash
+RUN_INITIALIZATION_E2E=1 .venv/bin/python -m unittest discover -s experiments/initialization_study/tests/e2e
+```

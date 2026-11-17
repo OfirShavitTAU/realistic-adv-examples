@@ -1,0 +1,22 @@
+{
+  "groups": {
+    "e2e": {
+      "family": "dogs",
+      "source": [
+        "images/dogs/207_golden_retriever/ILSVRC2012_val_00034584.jfif"
+      ],
+      "initializations": [
+        "images/dogs/208_labrador_retriever/ILSVRC2012_val_00019169.jfif"
+      ]
+    }
+  },
+  "random_baseline": false,
+  "attack": {
+    "name": "hsja",
+    "norms": ["l2"],
+    "seeds": [0],
+    "max_queries": 100,
+    "max_unsafe_queries": 100,
+    "max_iterations": 1
+  }
+}
