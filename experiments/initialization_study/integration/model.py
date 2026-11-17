@@ -5,6 +5,7 @@ from torchvision.models import ResNet50_Weights, resnet50
 
 from src.model_wrappers import TorchModelWrapper
 
+from ..progress import stage
 from ..validation import PlanError
 
 
@@ -54,7 +55,11 @@ def select_device(device_name: str = "cuda", cpu: bool = False) -> torch.device:
 """
 def load_target_model(device_name: str = "cuda", cpu: bool = False) -> TorchModelWrapper:
     device = select_device(device_name, cpu=cpu)
-    inner_model = resnet50(weights=ResNet50_Weights.IMAGENET1K_V1).to(device).eval()
+    with stage("Construct ResNet-50 and load weights (may download on first use)"):
+        inner_model = resnet50(weights=ResNet50_Weights.IMAGENET1K_V1)
+
+    with stage("Transfer ResNet-50 to " + str(device)):
+        inner_model = inner_model.to(device).eval()
 
     # The original constructor hardcodes .cuda() for supplied statistics.
     # Assign the same statistics afterward on the selected device, preserving its preprocessing code.

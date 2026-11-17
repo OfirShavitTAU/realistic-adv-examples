@@ -515,3 +515,18 @@ For explicit unittest execution:
 ```bash
 .venv/bin/python -m unittest discover -s experiments/initialization_study/tests/e2e
 ```
+
+## Execution diagnostics
+
+Experiment execution prints timestamped `START`, `DONE`, and `FAILED` messages
+with elapsed time for planning, input copies, model construction/weight loading,
+device transfer, individual preflight images, task preparation, CUDA synchronization,
+HSJA, final verification, and artifact saving. A `WAIT` message every 30 seconds
+identifies a stage that has not returned; it does not prove the GPU is advancing.
+Failures include a traceback. These diagnostics go to the console, not a separate log file.
+
+Initial reports are created before model preparation; task tensors, images, and query
+history appear after each task returns and is saved. An initial summary alone does
+not indicate that an attack has completed. Real E2E child output is streamed live,
+including stderr, rather than buffered until process completion. Its timeout still
+applies when the child is silent, and saved artifacts are checked after execution.
