@@ -131,6 +131,21 @@ class PipelineTests(unittest.TestCase):
 
         self.assertEqual([task.status for task in result.tasks], ["error", "completed", "completed"])
 
+    def test_misclassified_source_skips_image_and_random_tasks(self) -> None:
+        source = pipeline.resolve_image(self.jobs[0]["source"])
+        self.predictions[source]["class_id"] = 231
+
+        with patch.object(pipeline, "run_hsja") as attack:
+            with patch.object(pipeline, "load_image_tensor") as prepare:
+                for job in self.jobs:
+                    result = pipeline.run_task(MagicMock(), self.config, job, self.predictions, self.device)
+                    self.assertEqual(result.status, "skipped")
+                    self.assertEqual(result.source_label_status, "incorrect")
+                    self.assertEqual(result.source_true_class_id, 207)
+                    self.assertEqual(result.model_queries, 0)
+                attack.assert_not_called()
+                prepare.assert_not_called()
+
     def test_generators_seeded_per_task(self) -> None:
         with patch.object(pipeline.random, "seed") as python_seed:
             with patch.object(pipeline.np.random, "seed") as numpy_seed:

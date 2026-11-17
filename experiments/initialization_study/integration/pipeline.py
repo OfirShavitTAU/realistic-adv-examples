@@ -11,14 +11,14 @@ import torch
 
 from src.model_wrappers import TorchModelWrapper
 
-from ..configuration.loader import STUDY_DIR
+from ..configuration.loader import STUDY_DIR, get_source_label
 from ..configuration.schemas import SelectedGroup, StudyConfig
 from ..inputs.preprocessing import load_image_tensor
 from ..planning.schemas import PlannedJob
-from ..run.run_preflight import check_pairs, collect_groups, predict_images
+from ..run.run_preflight import check_pairs, check_sources, collect_groups, predict_images
 from .hsja import AttackOutput, run_hsja
 from .model import load_target_model, require_cuda
-from .schemas import ImagePrediction
+from .schemas import ImagePrediction, SourceCheck, SourceLabelStatus
 
 
 ################## EXECUTION RESULTS ##################
@@ -33,7 +33,8 @@ class TaskResult:
     model_queries: int = 0
     output: AttackOutput | None = None
     reason: str | None = None
-    source_label_status: Literal["not_checked"] = "not_checked"
+    source_label_status: SourceLabelStatus = "correct"
+    source_true_class_id: int | None = None
 
 
 @dataclass
@@ -43,6 +44,7 @@ class PipelineResult:
     preparation_queries: int
     predictions: dict[Path, ImagePrediction]
     tasks: list[TaskResult]
+    sources: list[SourceCheck]
 
 
 ################## TASK PREPARATION ##################
@@ -81,7 +83,7 @@ def resolve_image(value: str) -> Path:
     @type job: PlannedJob
     @param job: One image or random-baseline task.
     @type predictions: dict[Path, ImagePrediction]
-    @param predictions: Cached preparation labels; ground-truth validation is pending.
+    @param predictions: Cached preparation predictions, checked against true labels inferred from class folders.
     @type device: torch.device
     @param device: The CUDA GPU selected for the whole pipeline.
     @rtype: TaskResult
@@ -92,14 +94,22 @@ def run_task(
     predictions: dict[Path, ImagePrediction], device: torch.device,
 ) -> TaskResult:
     source_path = resolve_image(job["source"])
-    source_class = predictions[source_path]["class_id"]
+    source_class = get_source_label(source_path)
+
+    if predictions[source_path]["class_id"] != source_class:
+        return TaskResult(
+            job, "skipped", reason="Source prediction does not match its ground-truth label.",
+            source_label_status="incorrect", source_true_class_id=source_class,
+        )
+
     initialization_path = resolve_image(job["initialization"]) if job["initialization"] is not None else None
 
     if initialization_path is not None:
         initialization_class = predictions[initialization_path]["class_id"]
 
         if initialization_class == source_class:
-            return TaskResult(job, "skipped", reason="Initialization has the same prediction as the source.")
+            return TaskResult(job, "skipped", reason="Initialization has the same prediction as the source.",
+                              source_true_class_id=source_class)
 
     # Preparation queries are already captured; each task starts a separate actual-query count.
     model.num_queries = 0
@@ -123,17 +133,18 @@ def run_task(
         image, counter, distance, success, extra = output
         cpu_output: AttackOutput = (image.detach().cpu(), counter, distance, success, extra)
 
-        return TaskResult(job, "completed", perf_counter() - started, model.num_queries, cpu_output)
+        return TaskResult(job, "completed", perf_counter() - started, model.num_queries, cpu_output,
+                          source_true_class_id=source_class)
     except (OSError, RuntimeError, ValueError, AssertionError) as error:
         return TaskResult(job, "error", perf_counter() - started, model.num_queries,
-                          reason=type(error).__name__ + ": " + str(error))
+                          reason=type(error).__name__ + ": " + str(error), source_true_class_id=source_class)
 
 
 ################## PIPELINE ##################
 
 """
     Loads one GPU model, checks all inputs, and runs the planned tasks in order.
-    Source ground-truth labels and final-result verification remain pending.
+    Correct-source eligibility is enforced; final-result verification remains pending.
     @type config: StudyConfig
     @param config: The validated study configuration.
     @type selected: list[SelectedGroup]
@@ -154,10 +165,11 @@ def run_pipeline(
     model = load_target_model(str(device))
 
     predictions = predict_images(model, groups)
+    source_checks = check_sources(selected, groups, predictions)
     check_pairs(selected, groups, predictions)
     preparation_queries = model.num_queries
 
-    print("\nSource ground-truth labels are NOT CHECKED. Attack reference labels use source predictions.")
+    print("\nSource predictions checked against ImageNet labels inferred from class folders.")
     print("Results are currently returned in memory only; output persistence and verification are pending.")
     tasks: list[TaskResult] = []
 
@@ -188,4 +200,4 @@ def run_pipeline(
         sum(task.status == "error" for task in tasks),
     ))
 
-    return PipelineResult(preparation_queries, predictions, tasks)
+    return PipelineResult(preparation_queries, predictions, tasks, source_checks)

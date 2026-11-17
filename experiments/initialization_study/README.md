@@ -116,6 +116,33 @@ Relative configuration paths are resolved against this study directory. Relative
 results use this study directory, regardless of the config file location.
 For module imports, run the command from the repository root.
 
+## Automatic source labels from class folders
+
+The configuration contains only image paths, not numeric source labels. The code
+reads each source's zero-based ImageNet class ID from the numeric prefix of its
+immediate parent directory, for example:
+
+```text
+images/dogs/207_golden_retriever/ILSVRC2012_val_00034584.jfif
+            ^ label 207
+```
+
+Use `<ImageNet ID>_<class name>` folders with IDs from 0 to 999. Missing prefixes,
+invalid IDs, and missing class names are rejected before model loading. Sources
+must be directly inside their class folders, not nested in unlabeled subdirectories.
+Relative paths are resolved against the study directory; symlinks use the resolved
+file's actual class folder. Original ImageNet IDs are preserved without renumbering.
+No image moves or separate source mapping file are needed for the existing layout.
+
+Both preflight and the pipeline compare each source's prediction with this folder
+label. Incorrectly classified sources are skipped for all tasks, including random
+baselines. Correct sources use the inferred true class as HSJA's original label.
+Initialization images need a different prediction; they do not require true labels.
+
+The directory assignment supplies the dataset ground truth. The code does not
+independently verify the human annotation or the meaning of the text after the ID.
+Preflight reports record `source_label_origin` as `class_directory`.
+
 ## Direct Play in PyCharm
 
 Open one of these files under `experiments/initialization_study/run/`, select the
@@ -203,7 +230,8 @@ binary boundary search, HSJA gradient estimation, and geometric step-size search
 It forwards those settings explicitly to the internal method, matching the original
 `__call__` path. It returns the original five-element tuple unchanged.
 
-Source ground-truth validation remains pending. The low-level adapter still expects its caller to check
+Automatic class-folder labels and source-correctness validation are now
+enforced by the pipeline. The low-level adapter still expects its caller to check
 source and initialization predictions; shape/device checks do not replace eligibility.
 Seed setup and orchestration are connected in `integration/pipeline.py`. Independent
 result verification, effective-parameter recording, and result persistence remain pending.
@@ -220,8 +248,8 @@ replace the original optimization method; they require no GPU and execute no mod
 
 ## GPU execution pipeline (stage 3)
 
-Execution is connected. Source ground-truth validation, independent final-result
-verification, and persistence remain pending. The default remains planning only.
+Execution and automatic class-folder label checks are connected. Independent final-result
+verification and persistence (step 4) remain pending. The default remains planning only.
 To explicitly execute on the GPU VM, use:
 
 ```bash
@@ -236,9 +264,12 @@ The pipeline performs these steps:
 1. Require the selected CUDA GPU, then validate group image files.
 2. Load the original model wrapper once for the whole experiment.
 3. Reuse the standalone preflight functions to predict each unique image once and
-   check source/initialization pairs. Count preparation queries separately.
+   compare each source prediction with its class-folder ground truth, and check pair
+   eligibility. Count preparation queries separately.
 4. Iterate over the already planned tasks, preserving group, norm, and seed choices.
-5. Skip image initializations predicted as the source class; random baselines remain eligible.
+5. Skip every task of a source predicted incorrectly, including all its random
+   baselines, norms, and seeds. For correct sources, skip only image initializations
+   predicted as the source class; random baselines remain eligible.
 6. For each eligible task, load raw tensors onto the GPU, reset actual model-query
    counting, and seed Python, NumPy, PyTorch, and CUDA with the task's seed.
 7. Call the adapter, which constructs a fresh original HSJA instance. Image and
@@ -255,7 +286,8 @@ Setup failures stop the pipeline. The command exits with an error status if any 
 failed, but skipped tasks are not errors.
 
 **Current limitations:** a `completed` task means HSJA returned, not independently
-verified attack success. Attack reference labels currently come from source predictions, not verified ground truth. The original counter and actual model-query count are both
+verified attack success. Attack reference labels are the class-folder true labels, after
+checking that cached source predictions match them. The original counter and actual model-query count are both
 available, and may differ; final accounting checks are pending. No result files,
 tensors, images, or summary CSV are saved yet. CLI outcomes are lost on process exit.
 Programmatic callers can retain the returned `PipelineResult` from `run_pipeline`.
@@ -264,7 +296,7 @@ Full experimental runs should wait for the persistence stage.
 The isolated adapter and pipeline checks execute mocked calls only:
 
 ```bash
-.venv/bin/python -m unittest experiments.initialization_study.tests.test_hsja_adapter experiments.initialization_study.tests.test_pipeline
+.venv/bin/python -m unittest experiments.initialization_study.tests.test_hsja_adapter experiments.initialization_study.tests.test_pipeline experiments.initialization_study.tests.test_source_labels
 ```
 
 ## GPU-only model preflight
@@ -298,9 +330,12 @@ original zero-based ImageNet class IDs and names and checks whether each configu
 initialization changes its source's predicted class. Norms and seeds do not repeat
 these deterministic preparation predictions. Random baselines are not sampled.
 
-Source ground-truth labels are not yet checked. Reports mark source-label status
-as `not_checked`. A different initialization prediction alone does not establish
-that the source was correctly classified; label validation remains pending.
+Source correctness is checked against the IDs inferred from source class folders. Each source
+is marked `correct` or `incorrect` and records both true and predicted ImageNet IDs.
+Each pair records `eligible`, which requires both a correct source and an
+initialization predicted as another class. Preflight reports mismatches; the pipeline
+skips all tasks associated with incorrectly predicted sources. These comparisons
+reuse cached predictions and add no model queries.
 
 Reports are saved under `preflight_reports/preflight-<Israel timestamp>/report.json`
 with the configuration, model weights, device, software versions, predictions,

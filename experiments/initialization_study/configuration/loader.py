@@ -69,6 +69,10 @@ def validate_groups(groups: dict[str, GroupConfig]) -> list[SelectedGroup]:
                     all(isinstance(path, str) and path.strip() for path in paths),
                     group + "." + role + " must be a nonempty list of image paths.")
 
+        # Class IDs belong to the image organization, not the user-facing configuration.
+        for image_path in settings["source"]:
+            get_source_label(Path(image_path))
+
         selected.append((family, group))
 
     return selected
@@ -103,3 +107,28 @@ def validate_attack(attack: AttackConfig) -> None:
 
     for key in budget_keys:
         require(type(attack[key]) is int and attack[key] > 0, key + " must be a positive integer.")
+
+
+"""
+    Reads the original ImageNet class ID from the source's immediate class folder.
+    @type source_path: Path
+    @param source_path: An absolute path or a path relative to the study directory.
+    @rtype: int
+    @returns: The numeric prefix in a class folder such as 207_golden_retriever.
+    @raises PlanError: If the class folder has no valid ID in [0, 999].
+"""
+def get_source_label(source_path: Path) -> int:
+    resolved_source = (STUDY_DIR / source_path).resolve()
+    class_folder = resolved_source.parent.name
+    prefix, separator, class_name = class_folder.partition("_")
+
+    valid_folder = (separator == "_" and prefix.isascii() and prefix.isdecimal()
+                    and bool(class_name.strip()))
+    require(valid_folder,
+            "Cannot infer source label. Place the image in an <ImageNet ID>_<class name> folder "
+            "such as 207_golden_retriever: " + str(resolved_source))
+
+    label = int(prefix)
+    require(0 <= label < 1000, "ImageNet class folder ID must be in [0, 999]: " + class_folder)
+
+    return label

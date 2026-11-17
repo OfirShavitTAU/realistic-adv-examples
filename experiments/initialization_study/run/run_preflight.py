@@ -19,12 +19,12 @@ from torchvision.models import ResNet50_Weights
 
 from src.model_wrappers import TorchModelWrapper
 
-from experiments.initialization_study.configuration.loader import STUDY_DIR, read_config
+from experiments.initialization_study.configuration.loader import STUDY_DIR, get_source_label, read_config
 from experiments.initialization_study.inputs.images import image_path, read_images
 from experiments.initialization_study.integration.model import load_target_model, require_cuda
 from experiments.initialization_study.inputs.preprocessing import load_image_tensor
 from experiments.initialization_study.configuration.schemas import SelectedGroup, StudyConfig
-from experiments.initialization_study.integration.schemas import ImagePrediction, PairCheck
+from experiments.initialization_study.integration.schemas import ImagePrediction, PairCheck, SourceCheck, SourceLabelStatus
 
 
 ################## INPUT VALIDATION ##################
@@ -89,8 +89,48 @@ def predict_images(
 
 
 """
+    Compares every source prediction with its ground-truth label inferred from its class folder.
+    Uses the numeric prefix of the source class folder without additional model queries.
+    @type selected: list[SelectedGroup]
+    @param selected: The family and group pairs to check.
+    @type groups: dict[str, tuple[list[Path], list[Path]]]
+    @param groups: Validated source and initialization paths.
+    @type predictions: dict[Path, ImagePrediction]
+    @param predictions: Cached predictions from the selected target model.
+    @rtype: list[SourceCheck]
+    @returns: One correctness record per source in each group.
+"""
+def check_sources(
+    selected: list[SelectedGroup],
+    groups: dict[str, tuple[list[Path], list[Path]]], predictions: dict[Path, ImagePrediction],
+) -> list[SourceCheck]:
+    checks: list[SourceCheck] = []
+
+    for family, group in selected:
+        sources, _ = groups[group]
+
+        for source in sources:
+            true_label = get_source_label(source)
+            predicted_label = predictions[source]["class_id"]
+            status: SourceLabelStatus = "correct" if predicted_label == true_label else "incorrect"
+            checks.append({
+                "family": family,
+                "group": group,
+                "source": predictions[source]["path"],
+                "true_class_id": true_label,
+                "predicted_class_id": predicted_label,
+                "source_label_status": status,
+            })
+            print("{}/{}: {} | ground truth: {} | predicted: {} | {}".format(
+                family, group, source.name, true_label, predicted_label, status,
+            ))
+
+    return checks
+
+
+"""
     Checks whether each initialization changes the source's predicted class.
-    This does not establish that the source was classified correctly.
+    Eligibility requires a correct source and an initialization changing its class.
     @type selected: list[SelectedGroup]
     @param selected: The family and group names for the report.
     @type groups: dict[str, tuple[list[Path], list[Path]]]
@@ -113,6 +153,8 @@ def check_pairs(
             for initialization in initializations:
                 source_prediction = predictions[source]
                 initialization_prediction = predictions[initialization]
+                true_label = get_source_label(source)
+                source_correct = source_prediction["class_id"] == true_label
                 changes_class = source_prediction["class_id"] != initialization_prediction["class_id"]
                 checks.append({
                     "family": family,
@@ -122,10 +164,12 @@ def check_pairs(
                     "source_class_id": source_prediction["class_id"],
                     "initialization_class_id": initialization_prediction["class_id"],
                     "changes_source_prediction": changes_class,
-                    "source_label_status": "not_checked",
+                    "source_true_class_id": true_label,
+                    "source_label_status": "correct" if source_correct else "incorrect",
+                    "eligible": source_correct and changes_class,
                 })
-                print("{}/{}: {} -> {} | changes class: {}".format(
-                    family, group, source.name, initialization.name, changes_class
+                print("{}/{}: {} -> {} | changes class: {} | eligible: {}".format(
+                    family, group, source.name, initialization.name, changes_class, source_correct and changes_class
                 ))
 
     return checks
@@ -135,7 +179,7 @@ def check_pairs(
 
 """
     Performs GPU-only preparation checks and saves a separate JSON report.
-    Source ground-truth validation remains pending until explicit labels are supplied.
+    Checks source predictions against class-folder labels before pair eligibility.
     @type argv: list[str] or None
     @param argv: Optional arguments; None uses the command-line arguments.
 """
@@ -158,6 +202,7 @@ def main(argv: list[str] | None = None) -> None:
         model = load_target_model(str(device))
 
         predictions = predict_images(model, groups)
+        source_checks = check_sources(selected, groups, predictions)
         checks = check_pairs(selected, groups, predictions)
         report = {
             "config": config,
@@ -171,7 +216,9 @@ def main(argv: list[str] | None = None) -> None:
             "preprocessing": ["RGB", "Resize(256)", "CenterCrop(224)", "ToTensor", "ImageNet normalization"],
             "preparation_queries": model.num_queries,
             "attack_queries": 0,
-            "source_label_status": "not_checked",
+            "source_label_status": "checked",
+            "source_label_origin": "class_directory",
+            "sources": source_checks,
             "predictions": list(predictions.values()),
             "pairs": checks,
         }
@@ -185,7 +232,9 @@ def main(argv: list[str] | None = None) -> None:
         parser.exit(1, "Preflight failed: " + str(error) + "\n")
 
     print("\nPreparation queries: {} | Attack queries: 0".format(model.num_queries))
-    print("Source ground-truth labels were not checked; folder names are not treated as verified labels.")
+    print("Correct sources: {} / {}".format(
+        sum(source["source_label_status"] == "correct" for source in source_checks), len(source_checks),
+    ))
     print("Report: " + str(report_path))
 
 

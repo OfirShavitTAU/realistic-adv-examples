@@ -1,6 +1,9 @@
 """Types for model predictions and preparation checks."""
 
-from typing import Literal, TypedDict
+from typing import Literal, TypeAlias, TypedDict
+
+
+SourceLabelStatus: TypeAlias = Literal["correct", "incorrect"]
 
 
 ################## PREFLIGHT REPORTS ##################
@@ -23,4 +26,17 @@ class PairCheck(TypedDict):
     source_class_id: int
     initialization_class_id: int
     changes_source_prediction: bool
-    source_label_status: Literal["not_checked"]
+    source_true_class_id: int
+    source_label_status: SourceLabelStatus
+    eligible: bool
+
+
+class SourceCheck(TypedDict):
+    """A source prediction compared with the ground-truth ID inferred from its class folder."""
+
+    family: str
+    group: str
+    source: str
+    true_class_id: int
+    predicted_class_id: int
+    source_label_status: SourceLabelStatus
