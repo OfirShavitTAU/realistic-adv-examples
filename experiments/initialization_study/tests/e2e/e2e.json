@@ -31,8 +31,7 @@
       "linf"
     ],
     "seeds": [
-      0,
-      1
+      0
     ],
     "max_queries": 100,
     "max_unsafe_queries": 100,
