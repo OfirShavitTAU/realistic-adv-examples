@@ -70,6 +70,12 @@ class DeviceTests(unittest.TestCase):
         target = MagicMock()
         pixels = torch.zeros((1, 3, 224, 224))
 
+        def final_prediction(*args):
+            target.num_queries += 1
+            return torch.tensor([208])
+
+        target.predict_label.side_effect = final_prediction
+
         def original_adapter(*args):
             self.assertEqual(args[1].device.type, 'cpu')
             self.assertEqual(args[2].device.type, 'cpu')
@@ -86,6 +92,8 @@ class DeviceTests(unittest.TestCase):
 
         self.assertEqual(result.status, 'completed')
         self.assertEqual(result.model_queries, 2)
+        self.assertEqual(result.validation_queries, 1)
+        self.assertEqual(result.final_predicted_class_id, 208)
 
     def test_cpu_and_device_flags_are_mutually_exclusive(self) -> None:
         for command in (run_experiment, run_preflight):

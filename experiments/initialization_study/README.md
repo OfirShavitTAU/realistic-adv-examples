@@ -28,6 +28,7 @@ initialization_study/
     integration/
         model.py                 # Load the original model wrapper; CUDA default, --cpu optional
         hsja.py                  # Call original HSJA with an image or random initialization
+        verification.py          # Independently classify exact final output pixels
         pipeline.py              # Load once, check inputs, seed and execute tasks
         schemas.py               # Prediction and preparation report types
     outputs/
@@ -239,8 +240,8 @@ Automatic class-folder labels and source-correctness validation are now
 enforced by the pipeline. The low-level adapter still expects its caller to check
 source and initialization predictions; shape/device checks do not replace eligibility.
 Seed setup, orchestration, and incremental storage are connected in `integration/pipeline.py`.
-Effective initial parameters are saved with each run. Independent final-result verification
-and query-accounting validation remain pending.
+Effective initial parameters are saved with each run. Final classification is verified
+independently; distance verification and query-accounting validation remain pending.
 Original budgets can be exceeded because HSJA checks them at iteration boundaries;
 the returned success flag is not independent verification or a distance threshold.
 
@@ -255,7 +256,8 @@ replace the original optimization method; they require no GPU and execute no mod
 ## Execution pipeline (stage 3)
 
 Execution, automatic class-folder label checks, and incremental storage are connected.
-Independent final-result verification and query-accounting validation remain pending. The default remains planning only.
+Final classification is independently verified. Distance verification and query-accounting
+validation remain pending. The default remains planning only.
 To explicitly execute on the GPU VM, use:
 
 ```bash
@@ -283,7 +285,8 @@ The pipeline performs these steps:
 7. Call the adapter, which constructs a fresh original HSJA instance. Image and
    random initialization paths stay untargeted.
 8. Keep the exact returned output pixels on CPU while retaining original counters
-   and the success flag.
+   and the success flag. Reclassify the exact output pixels and record verified success
+   or failure, counting the extra query separately.
    Save exact source/initialization tensors, output tensors, display PNGs, and query history.
 9. Update the summary CSV and run state after every task, including skipped and failed
    tasks, then print a final summary and the output directory.
@@ -295,12 +298,12 @@ and the pipeline proceeds to later tasks; KeyboardInterrupt is not swallowed.
 Setup failures stop the pipeline. The command exits with an error status if any task
 failed, but skipped tasks are not errors.
 
-**Current limitations:** a `completed` task means HSJA returned, not independently
-verified attack success. Attack reference labels are the class-folder true labels, after
-checking that cached source predictions match them. The original counter and actual model-query count are both
-available, and may differ; final accounting checks are pending. Source/pair eligibility
-is checked, but final prediction and independent L2/Linf fields remain `not_checked`
-or blank. Programmatic callers also receive a `PipelineResult` containing outcomes
+**Current limitations:** execution status `completed` means the algorithm returned and
+final classification was checked; consult `attack_outcome` for success or failure.
+Success currently means a final class different from the verified source class, with
+no distance threshold. The original counter and actual attack-query count are both
+available and may differ; final accounting checks are pending. Independent L2/Linf
+fields remain blank with `distance_validation_status=not_checked`. Programmatic callers also receive a `PipelineResult` containing outcomes
 and the saved output directory. GPU execution still needs an actual pilot run.
 
 The isolated adapter and pipeline checks execute mocked calls only (no real model or attack):
@@ -423,10 +426,33 @@ model queries, reported total/unsafe/safe queries, reported distance/success, an
 artifact paths. Safe/unsafe names retain the researchers' semantics. Preparation
 cost is stored once per run, not duplicated into every task's attack cost.
 
-Independent final prediction, L2/Linf verification, and final success checks are not
-implemented yet. Their fields remain `not_checked` or blank; the original HSJA flag
-is explicitly named `attack_reported_success`. Validation-query count remains zero.
-A completed task means the original method returned, not a verified successful attack.
+Each returned result is independently classified from the exact tensor before PNG
+rounding. `final_predicted_class_id` and `final_predicted_class_name` record the final
+ImageNet class. `attack_success` is true when it differs from the source's verified
+folder label. A checked same-class result is a verified failure, even if HSJA returned
+its own success flag as true; that flag remains separately named `attack_reported_success`.
+This checks classification only; independent distance computation and thresholds remain
+pending. The distance fields stay blank with `distance_validation_status=not_checked`.
+
+`attack_outcome` identifies each task as `success`, `failure`, `skipped`, `error`, or
+`not_checked`; pending/running states appear while a run is in progress. A failure
+means a completed, verified result retaining the source class. Skips and errors are
+not counted as verified failures. If final inference errors, its result is unknown,
+validation is marked `error`, and the original attack artifacts are still saved.
+Task metadata and the CSV retain validation errors and the separate validation cost.
+
+`run_info.json` stores outcome counts, task IDs grouped by outcome, verified-task
+count, and `verified_success_rate = successes / (successes + failures)`. Skips,
+errors, and unverified results do not enter this denominator; the rate is null if
+there are no verified results. These outcomes and the final class are also printed
+to the console. A run can complete normally while containing verified failures;
+CLI errors indicate execution/validation errors, not simply a failed attack.
+
+Each normal final check adds one model query. `actual_model_queries` remains the
+attack-only cost, `validation_queries` is separate, and `total_task_model_queries`
+includes both. Run-level `total_model_queries` also includes preparation queries.
+Original HSJA phase histories and counters are not modified by final validation.
+Older result directories are not retroactively classified or rewritten.
 
 Each task is marked `running` before it starts. Artifacts are saved before publishing
 its terminal summary row. JSON, tensor, and CSV replacements are atomic per file;
@@ -467,9 +493,10 @@ A process timeout may leave partial output.
 
 It requires one completed task, CPU metadata, a summary row, a display PNG, exact
 output/input tensors, and recorded query history. A skipped source or initialization
-fails the test because it does not exercise the attack path. Independent final
-attack-success/distance verification remains pending; this test checks end-to-end
-execution and output storage.
+fails the test because it does not exercise the attack path. It also requires a checked final class, an explicit success/failure outcome, and
+one separately counted validation query. It accepts either verified classification
+outcome; this is an integration test, not a guarantee that one iteration succeeds.
+Independent distance verification remains pending.
 
 The `e2e` directory deliberately has no package marker so ordinary unittest discovery
 does not recurse into it. Import-based test collection also skips the test unless

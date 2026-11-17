@@ -32,8 +32,9 @@ COLUMNS = [
     "source_label_status",
     "initialization_predicted_class_id", "initialization_predicted_class_name", "elapsed_seconds", "actual_model_queries",
     "reported_total_queries", "reported_unsafe_queries", "reported_safe_queries",
-    "attack_reported_distance", "attack_reported_success", "final_validation_status",
-    "final_predicted_class_id", "l2", "linf", "validation_queries",
+    "attack_reported_distance", "attack_reported_success", "attack_outcome", "attack_success", "final_validation_status",
+    "final_predicted_class_id", "final_predicted_class_name", "validation_error",
+    "l2", "linf", "distance_validation_status", "validation_queries", "total_task_model_queries",
     "result_image", "result_tensor", "task_metadata", "query_history",
 ]
 
@@ -122,7 +123,8 @@ class RunWriter:
             row: dict[str, object] = {column: None for column in COLUMNS}
             row.update({key: value for key, value in job.items() if key in COLUMNS})
             row.update({"task_id": self.task_id(index), "status": "pending", "final_validation_status": "not_checked",
-                        "actual_model_queries": 0, "validation_queries": 0, "result_image": None})
+                        "actual_model_queries": 0, "validation_queries": 0, "result_image": None,
+                        "attack_outcome": "pending", "distance_validation_status": "not_checked", "total_task_model_queries": 0})
             self.rows.append(row)
 
         effective_parameters: dict[str, object] = {}
@@ -139,6 +141,8 @@ class RunWriter:
             "effective_attack_parameters": effective_parameters, "total_tasks": len(jobs), "finished_tasks": 0,
             "active_task_id": None, "preparation_queries": 0, "actual_attack_model_queries": 0,
             "validation_queries": 0, "final_validation_status": "not_checked", "source_label_origin": "class_directory",
+            "distance_validation_status": "not_checked",
+            "success_definition": "final_prediction_differs_from_verified_source_ground_truth",
         }
         write_json(self.directory / "config.json", config)
         write_json(self.directory / "data/plan.json", jobs)
@@ -200,12 +204,13 @@ class RunWriter:
     """
     def start_task(self, index: int) -> None:
         self.rows[index]["status"] = "running"
+        self.rows[index]["attack_outcome"] = "running"
         self.info["active_task_id"] = self.task_id(index)
         self.flush()
 
     """
         Stores task artifacts first, then publishes the completed/skipped/error summary row.
-        Reported success and distance are retained separately from future independent validation.
+        Reported HSJA success remains separate from verified classification success and final class.
     """
     def save_task(self, index: int, result: "TaskResult") -> None:
         require(result.job == self.jobs[index], "Task result does not match the planned task.")
@@ -220,7 +225,13 @@ class RunWriter:
                     "source_true_class_id": result.source_true_class_id, "elapsed_seconds": result.elapsed_seconds,
                     "actual_model_queries": result.model_queries,
                     "source_predicted_class_id": self.predictions[source]["class_id"],
-                    "source_predicted_class_name": self.predictions[source]["class_name"]})
+                    "source_predicted_class_name": self.predictions[source]["class_name"],
+                    "attack_outcome": result.outcome, "attack_success": result.attack_success,
+                    "final_validation_status": result.final_validation_status,
+                    "final_predicted_class_id": result.final_predicted_class_id,
+                    "final_predicted_class_name": result.final_predicted_class_name,
+                    "validation_queries": result.validation_queries, "validation_error": result.validation_error,
+                    "total_task_model_queries": result.model_queries + result.validation_queries})
 
         if initialization is not None:
             row["initialization_predicted_class_id"] = self.predictions[initialization]["class_id"]
@@ -262,7 +273,8 @@ class RunWriter:
             "query_history_status": history_status,
             "reported_query_counts": ({key: value for key, value in query_details.items() if key != "history"}
                                       if query_details is not None else None),
-            "final_validation_status": "not_checked",
+            "final_validation_status": result.final_validation_status,
+            "distance_validation_status": "not_checked",
         })
         self.rows[index] = row
         self.info["finished_tasks"] = sum(item["status"] in ("completed", "skipped", "error") for item in self.rows)
@@ -274,6 +286,31 @@ class RunWriter:
         Atomically updates the CSV and run metadata after each observable state change.
     """
     def flush(self) -> None:
+        outcome_names = ("success", "failure", "skipped", "error", "not_checked", "pending", "running")
+        task_ids = {name: [row["task_id"] for row in self.rows if row["attack_outcome"] == name]
+                    for name in outcome_names}
+        counts = {name: len(identifiers) for name, identifiers in task_ids.items()}
+        verified = counts["success"] + counts["failure"]
+        self.info["outcomes"] = counts
+        self.info["task_ids_by_outcome"] = task_ids
+        self.info["verified_tasks"] = verified
+        self.info["verified_success_rate"] = counts["success"] / verified if verified else None
+        self.info["validation_queries"] = sum(int(row["validation_queries"] or 0) for row in self.rows)
+        self.info["total_model_queries"] = (int(self.info["preparation_queries"]) +
+                                           int(self.info["actual_attack_model_queries"]) +
+                                           int(self.info["validation_queries"]))
+        terminal_rows = [row for row in self.rows if row["status"] in ("completed", "skipped", "error")]
+        validation_errors = any(row["final_validation_status"] == "error" for row in self.rows)
+
+        if validation_errors:
+            self.info["final_validation_status"] = "partial" if verified else "error"
+        elif verified:
+            all_checked = (len(terminal_rows) == len(self.rows) and not counts["not_checked"]
+                           and not counts["error"])
+            self.info["final_validation_status"] = "checked" if all_checked else "partial"
+        else:
+            self.info["final_validation_status"] = "not_checked"
+
         write_csv(self.directory / "summary.csv", self.rows, COLUMNS)
         write_json(self.directory / "run_info.json", self.info)
 

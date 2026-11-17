@@ -27,7 +27,7 @@ class CPUExperimentE2E(unittest.TestCase):
     """
         Runs the public experiment command with the small fixture and explicit CPU mode.
         Requires a completed attack and real artifacts; skipped tasks do not pass.
-        Checks integration and storage, not independent attack success or final distance quality.
+        Checks storage and final classification reporting; distance verification remains separate.
     """
     def test_single_source_and_initialization(self) -> None:
         command = [
@@ -72,7 +72,15 @@ class CPUExperimentE2E(unittest.TestCase):
         self.assertEqual(row["initialization_mode"], "image")
         self.assertEqual(row["source_label_status"], "correct")
         self.assertGreater(int(row["actual_model_queries"]), 0)
-        self.assertEqual(row["final_validation_status"], "not_checked")
+        self.assertEqual(row["final_validation_status"], "checked")
+        self.assertIn(row["attack_outcome"], ("success", "failure"))
+        self.assertEqual(int(row["validation_queries"]), 1)
+        expected_success = int(row["final_predicted_class_id"]) != int(row["source_true_class_id"])
+        self.assertEqual(row["attack_success"], str(expected_success))
+        self.assertTrue(row["final_predicted_class_name"])
+        self.assertEqual(info["validation_queries"], 1)
+        self.assertEqual(info["verified_tasks"], 1)
+        self.assertEqual(info["total_model_queries"], 2 + int(row["actual_model_queries"]) + 1)
 
         for field in ("result_image", "result_tensor", "task_metadata", "query_history"):
             self.assertTrue(row[field], "Missing artifact path: " + field)

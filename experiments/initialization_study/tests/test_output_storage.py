@@ -141,6 +141,52 @@ class OutputStorageTests(unittest.TestCase):
         self.assertTrue((writer.directory / row['result_image']).exists())
         self.assertFalse((writer.directory / 'data/task-000003/initialization.pt').exists())
 
+    def test_verified_outcomes_names_and_success_rate_are_saved(self) -> None:
+        writer = self.writer()
+        for index, success in enumerate((True, False)):
+            result = self.result(index)
+            result.final_validation_status = 'checked'
+            result.final_predicted_class_id = 208 if success else 207
+            result.final_predicted_class_name = 'Labrador retriever' if success else 'golden retriever'
+            result.attack_success = success
+            result.validation_queries = 1
+            writer.save_task(index, result)
+        writer.save_task(2, TaskResult(self.jobs[2], 'skipped', reason='test skip'))
+        rows = self.rows(writer.directory)
+        self.assertEqual([row['attack_outcome'] for row in rows], ['success', 'failure', 'skipped'])
+        self.assertEqual(rows[1]['attack_reported_success'], 'True')
+        self.assertEqual(rows[1]['attack_success'], 'False')
+        self.assertEqual(rows[0]['final_predicted_class_name'], 'Labrador retriever')
+        self.assertEqual(rows[0]['total_task_model_queries'], '4')
+        self.assertEqual(rows[0]['distance_validation_status'], 'not_checked')
+        info = json.loads((writer.directory / 'run_info.json').read_text())
+        self.assertEqual(info['outcomes']['success'], 1)
+        self.assertEqual(info['outcomes']['failure'], 1)
+        self.assertEqual(info['outcomes']['skipped'], 1)
+        self.assertEqual(info['verified_success_rate'], 0.5)
+        self.assertEqual(info['verified_tasks'], 2)
+        self.assertEqual(info['validation_queries'], 2)
+        self.assertEqual(info['total_model_queries'], 11)
+        self.assertEqual(info['task_ids_by_outcome']['failure'], ['task-000002'])
+
+    def test_validation_errors_keep_original_output_and_are_not_counted_as_failures(self) -> None:
+        writer = self.writer()
+        result = self.result()
+        result.status = 'error'
+        result.final_validation_status = 'error'
+        result.validation_error = 'synthetic verification error'
+        result.validation_queries = 1
+        writer.save_task(0, result)
+        row = self.rows(writer.directory)[0]
+        self.assertEqual(row['attack_outcome'], 'error')
+        self.assertEqual(row['attack_success'], '')
+        self.assertTrue((writer.directory / row['result_tensor']).exists())
+        info = json.loads((writer.directory / 'run_info.json').read_text())
+        self.assertEqual(info['outcomes']['error'], 1)
+        self.assertEqual(info['outcomes']['failure'], 0)
+        self.assertIsNone(info['verified_success_rate'])
+        self.assertEqual(info['final_validation_status'], 'error')
+
     def test_existing_run_directory_not_overwritten(self) -> None:
         writer = self.writer()
         snapshot = (writer.directory / 'config.json').read_bytes()

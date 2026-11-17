@@ -20,13 +20,14 @@ from ..run.run_preflight import check_pairs, check_sources, collect_groups, pred
 from .hsja import AttackOutput, run_hsja
 from .model import load_target_model, select_device
 from .schemas import ImagePrediction, SourceCheck, SourceLabelStatus
+from .verification import verify_final_prediction
 
 
 ################## EXECUTION RESULTS ##################
 
 @dataclass
 class TaskResult:
-    """One task outcome; completed means returned, not independently verified success."""
+    """Execution status and independent classification outcome for one planned task."""
 
     job: PlannedJob
     status: Literal["completed", "skipped", "error"]
@@ -38,6 +39,25 @@ class TaskResult:
     source_true_class_id: int | None = None
     source_tensor: torch.Tensor | None = None
     initialization_tensor: torch.Tensor | None = None
+    final_validation_status: Literal["not_checked", "checked", "error"] = "not_checked"
+    final_predicted_class_id: int | None = None
+    final_predicted_class_name: str | None = None
+    attack_success: bool | None = None
+    validation_queries: int = 0
+    validation_error: str | None = None
+
+    """
+        Separates verified success/failure from skipped, errored, or unverified executions.
+    """
+    @property
+    def outcome(self) -> Literal["success", "failure", "skipped", "error", "not_checked"]:
+        if self.status in ("skipped", "error"):
+            return self.status
+
+        if self.final_validation_status == "checked" and self.attack_success is not None:
+            return "success" if self.attack_success else "failure"
+
+        return "not_checked"
 
 
 @dataclass
@@ -80,7 +100,8 @@ def resolve_image(value: str) -> Path:
 """
     Checks source and initialization eligibility, seeds the task, and calls the HSJA adapter.
     Skips misclassified sources and same-class initializations without attack queries.
-    Returns the outcome and actual query count; task errors are captured and exact output pixels move to CPU.
+    Verifies the exact final image and separates validation queries from attack queries.
+    Task errors are captured and returned output pixels are retained on CPU.
 """
 def run_task(
     model: TorchModelWrapper, config: StudyConfig, job: PlannedJob,
@@ -134,13 +155,27 @@ def run_task(
         image, counter, distance, success, extra = output
         cpu_output: AttackOutput = (image.detach().cpu(), counter, distance, success, extra)
 
-        return TaskResult(job, "completed", perf_counter() - started, model.num_queries, cpu_output,
-                          source_true_class_id=source_class, source_tensor=source_pixels,
-                          initialization_tensor=initialization_pixels)
+        attack_queries = model.num_queries
     except (OSError, RuntimeError, ValueError, AssertionError) as error:
         return TaskResult(job, "error", perf_counter() - started, model.num_queries,
                           reason=type(error).__name__ + ": " + str(error), source_true_class_id=source_class,
                           source_tensor=source_pixels, initialization_tensor=initialization_pixels)
+
+    validation = verify_final_prediction(model, cpu_output[0], source_class, device)
+    reason = validation.error
+
+    if validation.attack_success is False:
+        reason = "Final prediction matches the source class."
+
+    return TaskResult(
+        job, "error" if validation.status == "error" else "completed",
+        perf_counter() - started, attack_queries, cpu_output, reason=reason,
+        source_true_class_id=source_class, source_tensor=source_pixels,
+        initialization_tensor=initialization_pixels, final_validation_status=validation.status,
+        final_predicted_class_id=validation.class_id, final_predicted_class_name=validation.class_name,
+        attack_success=validation.attack_success, validation_queries=validation.queries,
+        validation_error=validation.error,
+    )
 
 
 ################## PIPELINE ##################
@@ -148,7 +183,7 @@ def run_task(
 """
     Loads one model on CUDA or explicitly on CPU and saves each task incrementally.
     Preparation, running tasks, errors, and interruptions are recorded separately.
-    Final-result verification is still pending; reported HSJA success is preserved as reported.
+    Final classification is independently checked; distance verification remains pending.
 """
 def run_pipeline(
     config: StudyConfig, selected: list[SelectedGroup], jobs: list[PlannedJob],
@@ -175,7 +210,7 @@ def run_pipeline(
         preparation_complete = True
 
         print("\nSource predictions checked against ImageNet labels inferred from class folders.")
-        print("Each task is saved immediately; independent final-result verification remains not_checked.")
+        print("Each task is saved immediately with its verified final class and classification outcome.")
 
         # Fixed seeds are repeatable on a fixed setup, not a cross-device guarantee.
         if device.type == "cuda":
@@ -191,9 +226,12 @@ def run_pipeline(
             result = run_task(model, config, job, predictions, device)
             writer.save_task(index, result)
             tasks.append(result)
-            print("{} | model queries: {} | task time: {:.3f}s".format(
-                result.status, result.model_queries, result.elapsed_seconds,
+            print("{} | outcome: {} | attack queries: {} | verification queries: {} | task time: {:.3f}s".format(
+                result.status, result.outcome, result.model_queries, result.validation_queries, result.elapsed_seconds,
             ))
+
+            if result.final_predicted_class_id is not None:
+                print("Final class: {} ({})".format(result.final_predicted_class_name, result.final_predicted_class_id))
 
             if result.reason is not None:
                 print(result.reason)
@@ -211,9 +249,19 @@ def run_pipeline(
 
         raise
 
-    print("\nPreparation queries: {} | Actual attack model queries: {}".format(
-        preparation_queries, sum(task.model_queries for task in tasks),
+    print("\nPreparation queries: {} | Attack queries: {} | Verification queries: {}".format(
+        preparation_queries, sum(task.model_queries for task in tasks), sum(task.validation_queries for task in tasks),
     ))
+    successes = sum(task.outcome == "success" for task in tasks)
+    failures = sum(task.outcome == "failure" for task in tasks)
+    print("Verified successes: {} | Verified failures: {} | Unverified: {}".format(
+        successes, failures, sum(task.outcome == "not_checked" for task in tasks),
+    ))
+
+    if successes + failures:
+        print("Success rate among verified tasks: {:.1%} ({}/{})".format(
+            successes / (successes + failures), successes, successes + failures,
+        ))
     print("Completed: {} | Skipped: {} | Errors: {}".format(
         sum(task.status == "completed" for task in tasks),
         sum(task.status == "skipped" for task in tasks),

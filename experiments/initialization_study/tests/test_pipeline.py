@@ -7,6 +7,7 @@ import torch
 
 from experiments.initialization_study.configuration.loader import STUDY_DIR, read_config
 from experiments.initialization_study.integration import pipeline
+from experiments.initialization_study.integration.verification import FinalValidation
 from experiments.initialization_study.planning.planner import build_plan
 
 
@@ -17,6 +18,10 @@ class PipelineTests(unittest.TestCase):
         writer_patch = patch.object(pipeline, "RunWriter")
         self.writer = writer_patch.start().return_value
         self.addCleanup(writer_patch.stop)
+        validation_patch = patch.object(pipeline, "verify_final_prediction",
+                                        return_value=FinalValidation("checked", 208, "Labrador retriever", True, 1))
+        self.verifier = validation_patch.start()
+        self.addCleanup(validation_patch.stop)
         self.config, self.selected = read_config(STUDY_DIR / "config.json")
         self.jobs, _ = build_plan(self.config, self.selected)
         self.device = torch.device("cuda:0")
@@ -92,6 +97,9 @@ class PipelineTests(unittest.TestCase):
 
             self.assertEqual(result.status, "completed")
             self.assertEqual(result.model_queries, 17)
+            self.assertEqual(result.validation_queries, 1)
+            self.assertEqual(result.final_predicted_class_id, 208)
+            self.assertEqual(result.outcome, "success")
             self.assertIs(result.output[0], output_image.detach.return_value.cpu.return_value)
             seed.assert_called_once_with(job["seed"], self.device)
             self.assertEqual(adapter.call_args.args[4], job["norm"])
@@ -99,6 +107,38 @@ class PipelineTests(unittest.TestCase):
 
             if job["initialization"] is None:
                 self.assertIsNone(adapter.call_args.args[5])
+
+    def test_failed_prediction_and_validation_errors_preserve_original_outputs(self) -> None:
+        validations = (FinalValidation("checked", 207, "golden retriever", False, 1),
+                       FinalValidation("error", queries=1, error="synthetic validation error"))
+        pixels = torch.zeros(1, 3, 224, 224)
+
+        for validation in validations:
+            model = MagicMock()
+
+            def attack(*args):
+                model.num_queries = 5
+                return pixels[0], MagicMock(), 0.5, True, {}
+
+            def verify(*args):
+                model.num_queries += 1
+                return validation
+
+            self.verifier.side_effect = verify
+
+            with patch.object(pipeline, "load_image_tensor", return_value=pixels):
+                with patch.object(pipeline, "run_hsja", side_effect=attack):
+                    with patch.object(pipeline, "set_task_seed"):
+                        result = pipeline.run_task(model, self.config, self.jobs[-1], self.predictions,
+                                                   torch.device("cpu"))
+
+            self.assertIsNotNone(result.output)
+            self.assertTrue(result.output[3])
+            self.assertEqual(result.model_queries, 5)
+            self.assertEqual(result.validation_queries, 1)
+            self.assertEqual(model.num_queries, 6)
+            self.assertEqual(result.outcome, "failure" if validation.status == "checked" else "error")
+            self.assertEqual(result.attack_success, validation.attack_success)
 
     def test_task_failure_retains_consumed_queries(self) -> None:
         model = MagicMock()
