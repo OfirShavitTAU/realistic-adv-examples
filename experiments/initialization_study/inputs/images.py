@@ -13,16 +13,8 @@ IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".jfif", ".png", ".bmp", ".webp"}
 ################## IMAGES AND PATHS ##################
 
 """
-    Resolves image paths and checks files, names, and image contents.
-    @type paths: list
-    @param paths: The configured image paths, in their original order.
-    @type study_dir: Path
-    @param study_dir: The base directory for relative image paths.
-    @type context: str
-    @param context: The group and role used in validation error messages.
-    @rtype: list
-    @returns: The absolute paths of the validated images.
-    @raises PlanError: If images are missing, corrupt, or have conflicting stems.
+    Resolves configured paths and validates image files, names, and contents.
+    Returns absolute paths in input order; missing, corrupt, or conflicting images raise PlanError.
 """
 def read_images(paths: list[str], study_dir: Path, context: str) -> list[Path]:
     images: list[Path] = []
@@ -56,13 +48,8 @@ def read_images(paths: list[str], study_dir: Path, context: str) -> list[Path]:
 
 
 """
-    Formats an image path for the plan.
-    @type path: Path
-    @param path: The resolved image path.
-    @type study_dir: Path
-    @param study_dir: The study directory used for relative paths.
-    @rtype: str
-    @returns: A relative path inside the study, otherwise an absolute path.
+    Formats paths inside the study directory as relative paths.
+    Keeps absolute paths for images outside that directory.
 """
 def image_path(path: Path, study_dir: Path) -> str:
     try:

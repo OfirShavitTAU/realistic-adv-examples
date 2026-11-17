@@ -11,12 +11,8 @@ from ..validation import PlanError
 ################## DEVICE SELECTION ##################
 
 """
-    Resolves a CUDA device and rejects CPU execution before loading any weights.
-    @type device_name: str
-    @param device_name: CUDA device name, for example cuda or cuda:0.
-    @rtype: torch.device
-    @returns: An available CUDA device with an explicit index.
-    @raises PlanError: If the device is invalid, is not CUDA, or is unavailable.
+    Selects an available CUDA GPU; CPU fallback is disabled.
+    Invalid or unavailable devices raise PlanError before any model weights are loaded.
 """
 def require_cuda(device_name: str) -> torch.device:
     try:
@@ -41,12 +37,9 @@ def require_cuda(device_name: str) -> torch.device:
 ################## TARGET MODEL ##################
 
 """
-    Loads ResNet-50 and uses the original TorchModelWrapper without modification.
-    Normalization, label prediction, and query counting remain in the researchers' code.
-    @type device_name: str
-    @param device_name: CUDA device to use; CPU fallback is disabled.
-    @rtype: TorchModelWrapper
-    @returns: The original model wrapper, ready for predict_label and HSJA.
+    Loads ResNet-50 V1 on CUDA and returns the original TorchModelWrapper.
+    The original wrapper handles normalization, predictions, and query counting.
+    Torchvision downloads weights on this call if they are not already cached.
 """
 def load_target_model(device_name: str = "cuda") -> TorchModelWrapper:
     device = require_cuda(device_name)

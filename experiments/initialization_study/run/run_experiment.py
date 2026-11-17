@@ -3,7 +3,6 @@
 import argparse
 import json
 import sys
-from importlib import import_module
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -15,6 +14,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(project_root))
 
 from experiments.initialization_study.configuration.loader import STUDY_DIR, read_config
+from experiments.initialization_study.integration.pipeline import run_pipeline
 from experiments.initialization_study.planning.display import print_plan
 from experiments.initialization_study.planning.planner import build_plan
 from experiments.initialization_study.validation import PlanError
@@ -23,10 +23,8 @@ from experiments.initialization_study.validation import PlanError
 ################## COMMAND LINE ##################
 
 """
-    Prepares the plan and optionally executes it when --execute is supplied.
-    The default remains plan-only; result persistence is not implemented yet.
-    @type argv: list or None
-    @param argv: Optional arguments; None uses the command-line arguments.
+    Builds and displays the experiment plan; --execute also runs the GPU-only pipeline.
+    Planning is the default. Results are not yet saved to disk, and task errors cause a nonzero exit.
 """
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -56,11 +54,8 @@ def main(argv: list[str] | None = None) -> None:
     if not args.execute:
         return
 
-    # Import execution dependencies only for explicit execution, keeping planning lightweight.
-    pipeline = import_module("experiments.initialization_study.integration.pipeline")
-
     try:
-        outcome = pipeline.run_pipeline(config, selected, jobs, args.device)
+        outcome = run_pipeline(config, selected, jobs, args.device)
     except (OSError, RuntimeError, ValueError) as error:
         parser.exit(1, "Execution failed: " + str(error) + "\n")
 

@@ -12,16 +12,8 @@ from ..validation import PlanError, require
 ################## EXPERIMENT PLAN ##################
 
 """
-    Validates the images in all selected groups and builds the complete plan.
-    @type config: dict
-    @param config: The validated study configuration.
-    @type selected: list
-    @param selected: The (family, group) pairs to include.
-    @type study_dir: Path
-    @param study_dir: The base directory for image paths and output planning.
-    @rtype: (list, list)
-    @returns: The planned jobs and warnings about identical image contents.
-    @raises PlanError: If any group contains invalid images.
+    Validates group images and combines their planned tasks and warnings.
+    Raises PlanError if any group is invalid; no partial plan is returned.
 """
 def build_plan(
     config: StudyConfig, selected: list[SelectedGroup], study_dir: Path = STUDY_DIR
@@ -30,7 +22,6 @@ def build_plan(
     errors: list[str] = []
     warnings: list[str] = []
 
-    # Validate each group before adding its jobs to the complete plan.
     for family, group in selected:
         settings = config["groups"][group]
 
@@ -53,22 +44,8 @@ def build_plan(
 
 
 """
-    Pairs each source with all initializations in its own group.
-    Adds one random baseline per source, norm, and seed when enabled.
-    @type config: dict
-    @param config: The study configuration containing attack and baseline settings.
-    @type family: str
-    @param family: The family used in output paths.
-    @type group: str
-    @param group: The group used in output paths.
-    @type sources: list
-    @param sources: The validated source image paths.
-    @type initializations: list
-    @param initializations: The validated initialization image paths.
-    @type study_dir: Path
-    @param study_dir: The base directory used to format image paths.
-    @rtype: (list, list)
-    @returns: The jobs for this group and warnings about identical images.
+    Pairs each source with every initialization in its own group for each norm and seed.
+    Adds a random baseline when enabled and warns about byte-identical source/initialization files.
 """
 def build_group_jobs(
     config: StudyConfig, family: str, group: str, sources: list[Path],
@@ -82,7 +59,7 @@ def build_group_jobs(
             if source.read_bytes() == initialization.read_bytes():
                 warnings.append("Identical source and initialization: " + str(source) + " / " + str(initialization))
 
-        # None keeps the original random initialization separate from image inputs.
+        # None selects the researchers' original random initialization.
         choices: list[tuple[InitializationMode, Path | None]] = [
             ("image", path) for path in initializations
         ]

@@ -26,13 +26,8 @@ from experiments.initialization_study.validation import PlanError
 ################## INPUTS ##################
 
 """
-    Validates all configured images before creating any preview output.
-    @type config: dict
-    @param config: The validated study configuration.
-    @type selected: list
-    @param selected: The (family, group) pairs to preview.
-    @rtype: list
-    @returns: Tuples of (family, group, role, image path), in configuration order.
+    Validates all configured images before any preview output is created.
+    Keeps the family, group, and source/initialization role with each image.
 """
 def collect_images(config: StudyConfig, selected: list[SelectedGroup]) -> list[PreviewEntry]:
     entries: list[PreviewEntry] = []
@@ -54,14 +49,8 @@ def collect_images(config: StudyConfig, selected: list[SelectedGroup]) -> list[P
 ################## IMAGE COMPARISON ##################
 
 """
-    Places the full original beside the resized and cropped image.
-    The original is reduced for display only; the processed image stays 224x224.
-    @type original: PIL.Image.Image
-    @param original: The full RGB image before model preprocessing.
-    @type processed: PIL.Image.Image
-    @param processed: The RGB image after Resize(256) and CenterCrop(224).
-    @rtype: PIL.Image.Image
-    @returns: A labeled comparison image with the original on the left.
+    Places the full original on the left and its processed 224x224 crop on the right.
+    Reduces only the displayed original to fit within 512x512; keeps the processed crop at its actual size.
 """
 def create_comparison(original: Image.Image, processed: Image.Image) -> Image.Image:
     original_display = original.copy()
@@ -92,13 +81,8 @@ def create_comparison(original: Image.Image, processed: Image.Image) -> Image.Im
 
 
 """
-    Creates and saves one comparison for each configured image entry.
-    Uses the same torchvision spatial transforms as src/dataset.py.
-    @type entries: list
-    @param entries: Validated (family, group, role, image path) tuples.
-    @type output_dir: Path
-    @param output_dir: The new preview directory to create.
-    @returns: None. Prints the input filename and comparison path for each entry.
+    Saves a comparison for each configured image using the shared spatial transforms.
+    Creates a new output directory, preserves original files, and prints each saved path.
 """
 def save_previews(entries: list[PreviewEntry], output_dir: Path) -> None:
     spatial_transform = spatial_transforms()
@@ -124,10 +108,8 @@ def save_previews(entries: list[PreviewEntry], output_dir: Path) -> None:
 ################## COMMAND LINE ##################
 
 """
-    Reads the configuration and saves image comparisons when explicitly invoked.
-    No models, model weights, predictions, or attacks are used.
-    @type argv: list or None
-    @param argv: Optional arguments; None uses the command-line arguments.
+    Reads the configuration and saves image comparisons in a new timestamped preview directory.
+    Uses Israel time and does not load a model, download weights, or run attacks.
 """
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)

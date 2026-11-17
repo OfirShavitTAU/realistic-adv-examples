@@ -30,13 +30,8 @@ from experiments.initialization_study.integration.schemas import ImagePrediction
 ################## INPUT VALIDATION ##################
 
 """
-    Validates every group before loading model weights or creating output.
-    @type config: StudyConfig
-    @param config: The validated study configuration.
-    @type selected: list[SelectedGroup]
-    @param selected: The (family, group) pairs to check.
-    @rtype: dict[str, tuple[list[Path], list[Path]]]
-    @returns: Source and initialization paths for each group.
+    Validates all configured source and initialization files before model loading.
+    Returns the image paths grouped for prediction.
 """
 def collect_groups(
     config: StudyConfig, selected: list[SelectedGroup]
@@ -55,13 +50,8 @@ def collect_groups(
 ################## PREDICTIONS AND PAIR CHECKS ##################
 
 """
-    Predicts once per unique resolved image path, including shared group inputs.
-    @type model: TorchModelWrapper
-    @param model: The loaded GPU-only target model.
-    @type groups: dict[str, tuple[list[Path], list[Path]]]
-    @param groups: Validated source and initialization paths.
-    @rtype: dict[Path, ImagePrediction]
-    @returns: Cached predicted class IDs and names, keyed by absolute image path.
+    Predicts each unique resolved image path once on the loaded CUDA model.
+    Caches original ImageNet class IDs and names, including images shared across groups.
 """
 def predict_images(
     model: TorchModelWrapper, groups: dict[str, tuple[list[Path], list[Path]]]
@@ -89,16 +79,8 @@ def predict_images(
 
 
 """
-    Compares every source prediction with its ground-truth label inferred from its class folder.
-    Uses the numeric prefix of the source class folder without additional model queries.
-    @type selected: list[SelectedGroup]
-    @param selected: The family and group pairs to check.
-    @type groups: dict[str, tuple[list[Path], list[Path]]]
-    @param groups: Validated source and initialization paths.
-    @type predictions: dict[Path, ImagePrediction]
-    @param predictions: Cached predictions from the selected target model.
-    @rtype: list[SourceCheck]
-    @returns: One correctness record per source in each group.
+    Compares cached source predictions with the ImageNet IDs inferred from class folders.
+    Returns a correctness record per source and group without making extra model queries.
 """
 def check_sources(
     selected: list[SelectedGroup],
@@ -129,16 +111,8 @@ def check_sources(
 
 
 """
-    Checks whether each initialization changes the source's predicted class.
-    Eligibility requires a correct source and an initialization changing its class.
-    @type selected: list[SelectedGroup]
-    @param selected: The family and group names for the report.
-    @type groups: dict[str, tuple[list[Path], list[Path]]]
-    @param groups: The validated input paths for each group.
-    @type predictions: dict[Path, ImagePrediction]
-    @param predictions: Cached model predictions for all inputs.
-    @rtype: list[PairCheck]
-    @returns: One classification-change check per source/initialization pair.
+    Checks each source/initialization pair using cached predictions.
+    A pair is eligible only when the source matches its folder label and the initialization changes class.
 """
 def check_pairs(
     selected: list[SelectedGroup], groups: dict[str, tuple[list[Path], list[Path]]],
@@ -178,10 +152,8 @@ def check_pairs(
 ################## COMMAND LINE ##################
 
 """
-    Performs GPU-only preparation checks and saves a separate JSON report.
-    Checks source predictions against class-folder labels before pair eligibility.
-    @type argv: list[str] or None
-    @param argv: Optional arguments; None uses the command-line arguments.
+    Runs GPU-only source and initialization checks and saves a separate JSON preparation report.
+    Rejects unavailable CUDA before model loading; no attacks are executed.
 """
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)

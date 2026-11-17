@@ -50,9 +50,7 @@ class PipelineResult:
 ################## TASK PREPARATION ##################
 
 """
-    Seeds the random generators used by the original attack for one task.
-    @type seed: int
-    @param seed: The seed from the planned task.
+    Seeds Python, NumPy, PyTorch, and CUDA for one planned task.
 """
 def set_task_seed(seed: int) -> None:
     random.seed(seed)
@@ -62,11 +60,8 @@ def set_task_seed(seed: int) -> None:
 
 
 """
-    Resolves a planned image path against the same study directory as preparation.
-    @type value: str
-    @param value: A relative or absolute image path from the plan.
-    @rtype: Path
-    @returns: The absolute path used as a key in the preparation predictions.
+    Resolves a planned image path against the study directory.
+    Uses the same absolute keys as the cached preparation predictions.
 """
 def resolve_image(value: str) -> Path:
     return (STUDY_DIR / value).resolve()
@@ -75,19 +70,9 @@ def resolve_image(value: str) -> Path:
 ################## SINGLE TASK ##################
 
 """
-    Prepares one source/initialization pair and delegates to the HSJA adapter.
-    @type model: TorchModelWrapper
-    @param model: The original model wrapper, shared across tasks on one CUDA GPU.
-    @type config: StudyConfig
-    @param config: Validated attack settings.
-    @type job: PlannedJob
-    @param job: One image or random-baseline task.
-    @type predictions: dict[Path, ImagePrediction]
-    @param predictions: Cached preparation predictions, checked against true labels inferred from class folders.
-    @type device: torch.device
-    @param device: The CUDA GPU selected for the whole pipeline.
-    @rtype: TaskResult
-    @returns: A completed, skipped, or errored task, including actual model queries.
+    Checks source and initialization eligibility, seeds the task, and calls the HSJA adapter.
+    Skips misclassified sources and same-class initializations without attack queries.
+    Returns the outcome and actual query count; task errors are captured and exact output pixels move to CPU.
 """
 def run_task(
     model: TorchModelWrapper, config: StudyConfig, job: PlannedJob,
@@ -111,7 +96,7 @@ def run_task(
             return TaskResult(job, "skipped", reason="Initialization has the same prediction as the source.",
                               source_true_class_id=source_class)
 
-    # Preparation queries are already captured; each task starts a separate actual-query count.
+    # Keep each task's actual query count separate from preparation.
     model.num_queries = 0
     started = perf_counter()
 
@@ -129,7 +114,7 @@ def run_task(
         output = run_hsja(model, source, source_label, config["attack"], job["norm"], initialization)
         torch.cuda.synchronize(device)
 
-        # Keep exact output pixels off the GPU between tasks; storage is the next stage.
+        # Preserve exact pixels in CPU memory; disk storage is still pending.
         image, counter, distance, success, extra = output
         cpu_output: AttackOutput = (image.detach().cpu(), counter, distance, success, extra)
 
@@ -143,18 +128,9 @@ def run_task(
 ################## PIPELINE ##################
 
 """
-    Loads one GPU model, checks all inputs, and runs the planned tasks in order.
-    Correct-source eligibility is enforced; final-result verification remains pending.
-    @type config: StudyConfig
-    @param config: The validated study configuration.
-    @type selected: list[SelectedGroup]
-    @param selected: The groups already used to build the plan.
-    @type jobs: list[PlannedJob]
-    @param jobs: The planned tasks, including norm and seed repetitions.
-    @type device_name: str
-    @param device_name: CUDA GPU to use; CPU fallback is disabled.
-    @rtype: PipelineResult
-    @returns: In-memory outcomes and preparation predictions; nothing is persisted.
+    Loads one CUDA model, runs preparation checks, and executes the planned tasks in order.
+    Separates preparation queries from attack queries and continues after recorded task errors.
+    Returns results in memory only; disk persistence and final-result verification are still pending.
 """
 def run_pipeline(
     config: StudyConfig, selected: list[SelectedGroup], jobs: list[PlannedJob],

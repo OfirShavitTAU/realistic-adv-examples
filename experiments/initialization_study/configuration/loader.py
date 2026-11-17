@@ -14,12 +14,8 @@ STUDY_DIR = Path(__file__).resolve().parents[1]
 ################## CONFIGURATION ##################
 
 """
-    Reads the configuration and validates its groups and attack settings.
-    @type path: Path
-    @param path: The path to the JSON configuration file.
-    @rtype: (StudyConfig, list[SelectedGroup])
-    @returns: The configuration and a list of (family, group) pairs.
-    @raises PlanError: If the configuration structure or settings are invalid.
+    Reads and validates the JSON configuration.
+    Returns the settings and selected (family, group) pairs in configuration order.
 """
 def read_config(path: Path) -> tuple[StudyConfig, list[SelectedGroup]]:
     with path.open(encoding="utf-8-sig") as stream:
@@ -37,13 +33,8 @@ def read_config(path: Path) -> tuple[StudyConfig, list[SelectedGroup]]:
 
 
 """
-    Validates group names, family names, and image path lists.
-    Image files themselves are checked later by read_images.
-    @type groups: dict[str, GroupConfig]
-    @param groups: The group definitions from the configuration.
-    @rtype: list
-    @returns: The (family, group) pairs in configuration order.
-    @raises PlanError: If a group is invalid or its output path is repeated.
+    Checks group definitions, image path lists, and output-name conflicts.
+    Validates source class-folder labels here; image files are checked separately.
 """
 def validate_groups(groups: dict[str, GroupConfig]) -> list[SelectedGroup]:
     require(isinstance(groups, dict) and groups, "groups must contain at least one group.")
@@ -79,10 +70,7 @@ def validate_groups(groups: dict[str, GroupConfig]) -> list[SelectedGroup]:
 
 
 """
-    Checks the attack name, norms, seeds, and positive budgets.
-    @type attack: AttackConfig
-    @param attack: The attack settings from the configuration.
-    @raises PlanError: If a required setting is missing or invalid.
+    Checks the HSJA name, supported norms, unique seeds, and positive budgets.
 """
 def validate_attack(attack: AttackConfig) -> None:
     expected = {"name", "norms", "seeds", "max_queries", "max_unsafe_queries", "max_iterations"}
@@ -110,12 +98,8 @@ def validate_attack(attack: AttackConfig) -> None:
 
 
 """
-    Reads the original ImageNet class ID from the source's immediate class folder.
-    @type source_path: Path
-    @param source_path: An absolute path or a path relative to the study directory.
-    @rtype: int
-    @returns: The numeric prefix in a class folder such as 207_golden_retriever.
-    @raises PlanError: If the class folder has no valid ID in [0, 999].
+    Reads the ImageNet ID from a class folder such as 207_golden_retriever.
+    Uses the immediate parent of the resolved image path; invalid names or IDs raise PlanError.
 """
 def get_source_label(source_path: Path) -> int:
     resolved_source = (STUDY_DIR / source_path).resolve()

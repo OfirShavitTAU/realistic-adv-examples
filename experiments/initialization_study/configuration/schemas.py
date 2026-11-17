@@ -17,7 +17,7 @@ class GroupConfig(TypedDict):
 
 
 class AttackConfig(TypedDict):
-    """Validated attack settings; budgets are used by the future execution stage."""
+    """Attack budgets and iteration count passed to the original HSJA."""
 
     name: Literal["hsja"]
     norms: list[Norm]

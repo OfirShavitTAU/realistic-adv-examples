@@ -1,1 +1,1 @@
-"""Configuration, validation, and planning for the initialization study."""
+"""Configuration, preparation, and execution of the initialization study."""

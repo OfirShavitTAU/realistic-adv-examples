@@ -22,14 +22,8 @@ AttackOutput: TypeAlias = tuple[
 ################## ATTACK SETUP ##################
 
 """
-    Creates a fresh original HSJA instance using the validated study settings.
-    All remaining algorithm parameters keep the original constructor defaults.
-    @type settings: AttackConfig
-    @param settings: Validated attack budgets and iteration count.
-    @type norm: Norm
-    @param norm: The norm for this individual task.
-    @rtype: HSJA
-    @returns: The researchers' attack object, not a replacement implementation.
+    Creates the original HSJA with the configured budgets and norm.
+    Other algorithm parameters keep the researchers' defaults.
 """
 def create_hsja(settings: AttackConfig, norm: Norm) -> HSJA:
     require(settings["name"] == "hsja", "Only HSJA is supported.")
@@ -50,16 +44,9 @@ def create_hsja(settings: AttackConfig, norm: Norm) -> HSJA:
 ################## INPUT CONTRACT ##################
 
 """
-    Checks the tensor shapes and GPU placement required by the original attack.
+    Checks single-image shapes, dtypes, and placement on the model's CUDA GPU.
+    Images must contain raw [0, 1] pixels shaped (1, 3, 224, 224); labels use shape (1,).
     Source correctness and initialization predictions must be checked by the caller.
-    @type model: TorchModelWrapper
-    @param model: The original model wrapper loaded on a CUDA GPU.
-    @type source: torch.Tensor
-    @param source: Raw float32 pixels in [0, 1], shaped (1, 3, 224, 224).
-    @type source_label: torch.Tensor
-    @param source_label: A single class ID, shaped (1,), on the same GPU.
-    @type initialization: torch.Tensor or None
-    @param initialization: Raw pixels with the source shape, or None for random noise.
 """
 def validate_inputs(
     model: TorchModelWrapper, source: torch.Tensor, source_label: torch.Tensor,
@@ -83,23 +70,9 @@ def validate_inputs(
 ################## ORIGINAL ATTACK CALL ##################
 
 """
-    Calls the original HSJA with an external image or its original random baseline.
-    No optimization, initialization search, query accounting, or stopping is rewritten.
-    @type model: TorchModelWrapper
-    @param model: The original GPU model wrapper.
-    @type source: torch.Tensor
-    @param source: Prepared raw source pixels; ImageNet normalization stays in the model.
-    @type source_label: torch.Tensor
-    @param source_label: The source class against which classification change is tested.
-    @type settings: AttackConfig
-    @param settings: Validated study attack settings.
-    @type norm: Norm
-    @param norm: The norm for this individual task.
-    @type initialization: torch.Tensor or None
-    @param initialization: Prepared image, or None to use the researchers' random initialization.
-    @rtype: AttackOutput
-    @returns: The original (image, counter, distance, success flag, extra results) tuple.
-        The success flag is not an independently verified study outcome.
+    Calls the original untargeted HSJA with an image initialization or None for original random noise.
+    Returns its (image, counter, distance, success, extra) tuple unchanged.
+    The success flag needs independent verification; original query budgets are not strict limits.
 """
 def run_hsja(
     model: TorchModelWrapper, source: torch.Tensor, source_label: torch.Tensor,

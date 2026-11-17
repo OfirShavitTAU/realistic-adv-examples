@@ -8,12 +8,7 @@ class PlanError(ValueError):
 ################## VALIDATION HELPERS ##################
 
 """
-    Checks a condition and stops planning if it is false.
-    @type condition: bool
-    @param condition: The condition required for valid input.
-    @type message: str
-    @param message: The error message for invalid input.
-    @raises PlanError: If the condition is false.
+    Raises PlanError when a required condition is false.
 """
 def require(condition: object, message: str) -> None:
     if not condition:
@@ -21,12 +16,8 @@ def require(condition: object, message: str) -> None:
 
 
 """
-    Checks that a name can be used in the planned output folders.
-    @type value: str
-    @param value: The family, group, or image stem to validate.
-    @rtype: str
-    @returns: The validated name.
-    @raises PlanError: If the name contains a path or invalid characters.
+    Checks that a family, group, or image stem is safe to use in output paths.
+    Rejects path separators and names incompatible with Windows.
 """
 def folder_name(value: str) -> str:
     valid_name = isinstance(value, str) and value not in {"", ".", ".."}

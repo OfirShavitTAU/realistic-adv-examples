@@ -10,21 +10,8 @@ from .schemas import PlannedJob
 ################## PLAN DISPLAY ##################
 
 """
-    Displays the settings, future output paths, and planned job counts.
-    @type config: dict
-    @param config: The validated study configuration.
-    @type selected: list
-    @param selected: The (family, group) pairs included in the plan.
-    @type jobs: list
-    @param jobs: The planned attack jobs.
-    @type warnings: list
-    @param warnings: The input warnings to display.
-    @type config_path: Path
-    @param config_path: The configuration file used for this plan.
-    @type run_dir: Path
-    @param run_dir: A preview of the future output directory; it is not created.
-    @type plan_only: bool
-    @param plan_only: Whether only planning was requested.
+    Displays the configuration, planned tasks, warnings, and future output paths.
+    The output directory is only a preview and is not created here.
 """
 def print_plan(
     config: StudyConfig, selected: list[SelectedGroup], jobs: list[PlannedJob],

@@ -10,9 +10,8 @@ from torchvision import transforms
 ################## IMAGE PREPARATION ##################
 
 """
-    Builds the spatial transforms used by both previews and model inputs.
-    @rtype: torchvision.transforms.Compose
-    @returns: Resize(256) followed by CenterCrop(224), as in src/dataset.py.
+    Creates Resize(256) and CenterCrop(224), matching src/dataset.py.
+    Shared by the preview and model input preparation.
 """
 def spatial_transforms() -> transforms.Compose:
     return transforms.Compose([
@@ -22,11 +21,8 @@ def spatial_transforms() -> transforms.Compose:
 
 
 """
-    Loads an image as a raw pixel tensor; normalization belongs to the model.
-    @type path: Path
-    @param path: The validated input image path.
-    @rtype: torch.Tensor
-    @returns: A float32 tensor of shape (1, 3, 224, 224) with values in [0, 1].
+    Loads an RGB image as float32 pixels in [0, 1], shaped (1, 3, 224, 224).
+    Applies the shared resize/crop; ImageNet normalization remains in the original model wrapper.
 """
 def load_image_tensor(path: Path) -> torch.Tensor:
     with Image.open(path) as image:

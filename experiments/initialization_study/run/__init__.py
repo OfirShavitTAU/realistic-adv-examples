@@ -1,1 +1,1 @@
-"""Directly runnable preview, GPU preflight, and experiment planning commands."""
+"""Directly runnable preview, GPU preflight, and experiment commands."""

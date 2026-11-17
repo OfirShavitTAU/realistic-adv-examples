@@ -72,7 +72,8 @@ Run from the repository root, using the repository's virtual environment:
 
 This validates the JSON settings, decodes the selected images, and lists every planned
 source/initialization pair plus one random baseline per source, norm, and seed.
-It does **not** import PyTorch, download weights, run attacks, or create results.
+It imports the pipeline dependencies but does **not** load a model, download weights,
+run attacks, or create results unless execution is explicitly requested.
 Pillow is used to verify images and is included in the study requirements.
 
 Edit `config.json`: `groups` defines the groups directly, with a `family`, a
