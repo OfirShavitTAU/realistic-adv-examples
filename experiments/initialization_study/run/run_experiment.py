@@ -13,6 +13,7 @@ if __package__ in (None, ""):
     project_root = Path(__file__).resolve().parents[3]
     sys.path.insert(0, str(project_root))
 
+from experiments.initialization_study.progress import progress, stage
 from experiments.initialization_study.configuration.loader import STUDY_DIR, read_config
 from experiments.initialization_study.integration.pipeline import run_pipeline
 from experiments.initialization_study.planning.display import print_plan
@@ -42,14 +43,18 @@ def main(argv: list[str] | None = None) -> None:
     device_options.add_argument("--cpu", action="store_true", help="Explicitly run on CPU instead of requiring CUDA.")
 
     args = parser.parse_args(argv)
+    progress("Experiment entry point | config={} | mode={} | device={}".format(
+        args.config, "plan only" if args.plan_only else "execute", "cpu" if args.cpu else args.device))
     config_path = Path(args.config)
 
     if not config_path.is_absolute():
         config_path = STUDY_DIR / config_path
 
     try:
-        config, selected = read_config(config_path)
-        jobs, warnings = build_plan(config, selected)
+        with stage('Read configuration'):
+            config, selected = read_config(config_path)
+        with stage('Build plan and validate images'):
+            jobs, warnings = build_plan(config, selected)
         stamp = datetime.now(ZoneInfo("Asia/Jerusalem")).strftime("%Y-%m-%d_%H-%M-%S-%f")
     except (PlanError, OSError, json.JSONDecodeError, ZoneInfoNotFoundError) as exc:
         parser.exit(1, "Planning failed: " + str(exc) + "\n")

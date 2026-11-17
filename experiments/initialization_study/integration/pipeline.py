@@ -11,6 +11,7 @@ import torch
 
 from src.model_wrappers import TorchModelWrapper
 
+from ..progress import progress, stage
 from ..configuration.loader import STUDY_DIR, get_source_label
 from ..configuration.schemas import SelectedGroup, StudyConfig
 from ..inputs.preprocessing import load_image_tensor
@@ -132,36 +133,44 @@ def run_task(
     initialization_pixels = None
 
     try:
-        source_pixels = load_image_tensor(source_path)
-        source = source_pixels.to(device)
+        with stage('Prepare source tensor and transfer to device'):
+            source_pixels = load_image_tensor(source_path)
+            source = source_pixels.to(device)
         initialization = None
 
         if initialization_path is not None:
-            initialization_pixels = load_image_tensor(initialization_path)
-            initialization = initialization_pixels.to(device)
+            with stage('Prepare initialization tensor and transfer to device'):
+                initialization_pixels = load_image_tensor(initialization_path)
+                initialization = initialization_pixels.to(device)
 
         source_label = torch.tensor([source_class], dtype=torch.long, device=device)
         set_task_seed(job["seed"], device)
 
         if device.type == "cuda":
-            torch.cuda.synchronize(device)
+            with stage('Synchronize CUDA before HSJA'):
+                torch.cuda.synchronize(device)
 
-        output = run_hsja(model, source, source_label, config["attack"], job["norm"], initialization)
+        with stage('Original HSJA execution'):
+            output = run_hsja(model, source, source_label, config["attack"], job["norm"], initialization)
 
         if device.type == "cuda":
-            torch.cuda.synchronize(device)
+            with stage("Synchronize CUDA after HSJA"):
+                torch.cuda.synchronize(device)
 
         # Keep exact pixels in CPU memory for immediate artifact storage.
-        image, counter, distance, success, extra = output
-        cpu_output: AttackOutput = (image.detach().cpu(), counter, distance, success, extra)
+        with stage('Transfer final attack output to CPU'):
+            image, counter, distance, success, extra = output
+            cpu_output: AttackOutput = (image.detach().cpu(), counter, distance, success, extra)
 
         attack_queries = model.num_queries
     except (OSError, RuntimeError, ValueError, AssertionError) as error:
+        progress("Task failed: {}: {}".format(type(error).__name__, error))
         return TaskResult(job, "error", perf_counter() - started, model.num_queries,
                           reason=type(error).__name__ + ": " + str(error), source_true_class_id=source_class,
                           source_tensor=source_pixels, initialization_tensor=initialization_pixels)
 
-    validation = verify_final_prediction(model, cpu_output[0], source_class, device)
+    with stage('Verify final prediction'):
+        validation = verify_final_prediction(model, cpu_output[0], source_class, device)
     reason = validation.error
 
     if validation.attack_success is False:
@@ -190,23 +199,32 @@ def run_pipeline(
     device_name: str = "cuda", output_dir: Path | None = None, config_path: Path | None = None,
     cpu: bool = False,
 ) -> PipelineResult:
-    device = select_device(device_name, cpu=cpu)
-    groups = collect_groups(config, selected)
+    with stage('Validate execution device'):
+        device = select_device(device_name, cpu=cpu)
+    with stage('Validate configured image files'):
+        groups = collect_groups(config, selected)
     print("Execution device: " + str(device))
-    writer = RunWriter(config, jobs, str(device), output_dir, config_path)
+    with stage('Create output directory and initial reports'):
+        writer = RunWriter(config, jobs, str(device), output_dir, config_path)
     model: TorchModelWrapper | None = None
     preparation_complete = False
     tasks: list[TaskResult] = []
-    print("Output directory: " + str(writer.directory))
+    progress("Output directory: " + str(writer.directory))
+    progress("Initial summary contains planned tasks; task artifacts appear after each task finishes.")
 
     try:
-        writer.copy_inputs(selected, groups)
-        model = load_target_model(str(device), cpu=cpu)
-        predictions = predict_images(model, groups)
-        source_checks = check_sources(selected, groups, predictions)
-        pair_checks = check_pairs(selected, groups, predictions)
+        with stage('Copy original images and save input manifest'):
+            writer.copy_inputs(selected, groups)
+        with stage('Load target model'):
+            model = load_target_model(str(device), cpu=cpu)
+        with stage('Preflight image predictions'):
+            predictions = predict_images(model, groups)
+        with stage('Validate source labels and initialization eligibility'):
+            source_checks = check_sources(selected, groups, predictions)
+            pair_checks = check_pairs(selected, groups, predictions)
         preparation_queries = model.num_queries
-        writer.save_preflight(predictions, source_checks, pair_checks, preparation_queries)
+        with stage('Save preflight report'):
+            writer.save_preflight(predictions, source_checks, pair_checks, preparation_queries)
         preparation_complete = True
 
         print("\nSource predictions checked against ImageNet labels inferred from class folders.")
@@ -222,9 +240,12 @@ def run_pipeline(
                 index + 1, len(jobs), job["family"], job["group"], job["norm"], job["seed"],
                 job["initialization"] or "random baseline",
             ))
-            writer.start_task(index)
-            result = run_task(model, config, job, predictions, device)
-            writer.save_task(index, result)
+            with stage('Record task start'):
+                writer.start_task(index)
+            with stage("Task {}/{} | {} | seed {}".format(index + 1, len(jobs), job["norm"], job["seed"])):
+                result = run_task(model, config, job, predictions, device)
+            with stage('Save task tensors, PNG, query history and summary'):
+                writer.save_task(index, result)
             tasks.append(result)
             print("{} | outcome: {} | attack queries: {} | verification queries: {} | task time: {:.3f}s".format(
                 result.status, result.outcome, result.model_queries, result.validation_queries, result.elapsed_seconds,
@@ -237,7 +258,8 @@ def run_pipeline(
                 print(result.reason)
 
         status = "completed_with_errors" if any(task.status == "error" for task in tasks) else "completed"
-        writer.finish(status)
+        with stage('Save final experiment reports'):
+            writer.finish(status)
     except BaseException as error:
         status = "interrupted" if isinstance(error, (KeyboardInterrupt, SystemExit)) else "failed"
         partial_preparation = model.num_queries if model is not None and not preparation_complete else None

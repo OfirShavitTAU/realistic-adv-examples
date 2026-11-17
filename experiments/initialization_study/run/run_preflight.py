@@ -19,6 +19,7 @@ from torchvision.models import ResNet50_Weights
 
 from src.model_wrappers import TorchModelWrapper
 
+from experiments.initialization_study.progress import stage
 from experiments.initialization_study.configuration.loader import STUDY_DIR, get_source_label, read_config
 from experiments.initialization_study.inputs.images import image_path, read_images
 from experiments.initialization_study.integration.model import load_target_model, select_device
@@ -65,8 +66,11 @@ def predict_images(
             if path in predictions:
                 continue
 
-            image = load_image_tensor(path).to(device)
-            class_id = int(model.predict_label(image).item())
+            with stage("Preflight image: " + str(path)):
+                with stage("Decode, preprocess and transfer to " + str(device)):
+                    image = load_image_tensor(path).to(device)
+                with stage("Model prediction"):
+                    class_id = int(model.predict_label(image).item())
             prediction: ImagePrediction = {
                 "path": image_path(path, STUDY_DIR),
                 "class_id": class_id,

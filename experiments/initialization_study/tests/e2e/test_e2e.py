@@ -7,6 +7,7 @@ import subprocess
 import sys
 import unittest
 from pathlib import Path
+from threading import Thread
 
 import torch
 from PIL import Image
@@ -42,6 +43,37 @@ def expected_run(config_path: Path) -> tuple[StudyConfig, list[PlannedJob], set[
              for role in ("source", "initializations") for value in settings[role]}
 
     return config, jobs, paths
+
+
+
+"""
+    Streams merged child output immediately while retaining it for E2E assertions.
+    Enforces the process timeout even when the child produces no output.
+"""
+def run_with_live_output(command: list[str], timeout: float) -> subprocess.CompletedProcess[str]:
+    lines: list[str] = []
+
+    with subprocess.Popen(command, cwd=PROJECT_ROOT, stdout=subprocess.PIPE,
+                          stderr=subprocess.STDOUT, text=True, bufsize=1) as process:
+        def read_output() -> None:
+            assert process.stdout is not None
+            for line in process.stdout:
+                lines.append(line)
+                print(line, end="", flush=True)
+
+        reader = Thread(target=read_output, daemon=True)
+        reader.start()
+
+        try:
+            process.wait(timeout=timeout)
+        except BaseException:
+            process.kill()
+            process.wait()
+            reader.join()
+            raise
+
+        reader.join()
+        return subprocess.CompletedProcess(command, process.returncode, "".join(lines), "")
 
 
 @unittest.skipUnless(E2E_ENABLED, "Real E2E is disabled by RUN_INITIALIZATION_E2E; set it to 1 to enable.")
@@ -177,12 +209,11 @@ class CPUExperimentE2E(unittest.TestCase):
         ), flush=True)
 
         try:
-            result = subprocess.run(command, cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=timeout)
+            result = run_with_live_output(command, timeout)
         except subprocess.TimeoutExpired:
             self.fail("CPU E2E exceeded {} seconds. Partial output may remain under results/.".format(timeout))
 
         log = result.stdout + result.stderr
-        print(log, flush=True)
         self.assertEqual(result.returncode, 0, log)
         output_lines = [line.removeprefix("Saved results: ") for line in result.stdout.splitlines()
                         if line.startswith("Saved results: ")]
@@ -191,7 +222,9 @@ class CPUExperimentE2E(unittest.TestCase):
         self.assertTrue(output_dir.is_relative_to(STUDY_DIR / "results"))
         self.assertTrue(output_dir.is_dir())
         print("E2E artifacts: " + str(output_dir), flush=True)
+        print("E2E: checking saved artifacts, task outcomes and query totals...", flush=True)
         self.check_saved_run(output_dir, config, jobs, unique_inputs)
+        print("E2E: artifact checks completed successfully.", flush=True)
 
 
 if __name__ == "__main__":
