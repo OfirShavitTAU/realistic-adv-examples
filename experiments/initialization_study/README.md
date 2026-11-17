@@ -7,9 +7,10 @@ This directory contains our experiment layer. The original `src` and `main.py` a
 ```text
 initialization_study/
     config.json
-    run.py                       # Plan only
-    preview.py                   # Image comparisons
-    preflight.py                 # GPU-only model preparation checks
+    run/                         # Tool implementations; press Play on the chosen file
+        run_preview.py           # Play to create image comparisons
+        run_preflight.py         # Play for GPU-only model preparation checks
+        run_experiment.py        # Play to display the experiment plan
     validation.py                # Shared checks and PlanError
     requirements.txt
     README.md
@@ -32,9 +33,10 @@ initialization_study/
     preflight_reports/           # Generated preparation reports (ignored by Git)
 ```
 
-Each code subdirectory has an `__init__.py` package marker. The three command-line
-entry points remain at the study root. All relative configuration and image paths
-still resolve against `initialization_study`, not against the new subdirectories.
+Each code subdirectory has an `__init__.py` package marker. The three runnable
+tools contain their own implementations under `run/`; there are no forwarding
+scripts or separate `pre_run` directory. Relative configuration and image paths
+still resolve against `initialization_study`, not against the `run` directory.
 A future `integration/hsja.py` will call the original HSJA implementation; attack
 execution is not connected yet.
 
@@ -62,7 +64,7 @@ attack execution; those dependencies will be added when the attack runner is imp
 Run from the repository root, using the repository's virtual environment:
 
 ```bash
-.venv/bin/python -m experiments.initialization_study.run
+.venv/bin/python -m experiments.initialization_study.run.run_experiment
 ```
 
 This validates the JSON settings, decodes the selected images, and lists every planned
@@ -104,19 +106,46 @@ The default budgets are small pilot settings, not the paper's full evaluation bu
 Alternative configuration:
 
 ```bash
-.venv/bin/python -m experiments.initialization_study.run --config configs/pilot.json
+.venv/bin/python -m experiments.initialization_study.run.run_experiment --config configs/pilot.json
 ```
 
 Relative configuration paths are resolved against this study directory. Relative image paths and
 results use this study directory, regardless of the config file location.
 For module imports, run the command from the repository root.
 
+## Direct Play in PyCharm
+
+Open one of these files under `experiments/initialization_study/run/`, select the
+project's Python 3.10 virtual environment, and press Play:
+
+| File | Action |
+| --- | --- |
+| `run_preview.py` | Save original/cropped image comparisons; no GPU needed. |
+| `run_preflight.py` | Check predictions and initialization pairs; CUDA GPU required. |
+| `run_experiment.py` | Validate inputs and display the experiment plan; no attacks yet. |
+
+There is no menu or code setting to change. Each file contains its tool's own
+implementation and uses this study's `config.json` by default. The tools support
+direct file execution even with a different working directory and accept their
+underlying tool's command-line arguments. Preflight stays GPU-only.
+
+They can also be run as modules from the repository root:
+
+```bash
+.venv/bin/python -m experiments.initialization_study.run.run_preview
+.venv/bin/python -m experiments.initialization_study.run.run_preflight --device cuda:0
+.venv/bin/python -m experiments.initialization_study.run.run_experiment
+```
+
+These replace the previous `pre_run` commands and the old standalone `run.py`.
+Output locations are unchanged.
+
 ## Image preprocessing preview
 
 To generate comparisons explicitly, run from the repository root:
 
 ```bash
-.venv/bin/python -m experiments.initialization_study.preview
+.venv/bin/python -m experiments.initialization_study.run.run_preview
 ```
 
 Use `--config configs/pilot.json` for an alternative configuration, resolved against
@@ -166,7 +195,7 @@ the version constraints and a compatible NVIDIA driver.
 Run only when ready on the GPU VM, from the repository root:
 
 ```bash
-.venv/bin/python -m experiments.initialization_study.preflight --device cuda:0
+.venv/bin/python -m experiments.initialization_study.run.run_preflight --device cuda:0
 ```
 
 An alternative configuration can be passed with `--config`. The command rejects a

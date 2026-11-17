@@ -2,14 +2,21 @@
 
 import argparse
 import json
+import sys
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from .configuration.loader import STUDY_DIR, read_config
-from .planning.display import print_plan
-from .planning.planner import build_plan
-from .validation import PlanError
+
+# Support direct Play in PyCharm as well as python -m execution.
+if __package__ in (None, ""):
+    project_root = Path(__file__).resolve().parents[3]
+    sys.path.insert(0, str(project_root))
+
+from experiments.initialization_study.configuration.loader import STUDY_DIR, read_config
+from experiments.initialization_study.planning.display import print_plan
+from experiments.initialization_study.planning.planner import build_plan
+from experiments.initialization_study.validation import PlanError
 
 
 ################## COMMAND LINE ##################

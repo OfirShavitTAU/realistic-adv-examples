@@ -2,9 +2,16 @@
 
 import argparse
 import json
+import sys
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+
+# Support direct Play in PyCharm as well as python -m execution.
+if __package__ in (None, ""):
+    project_root = Path(__file__).resolve().parents[3]
+    sys.path.insert(0, str(project_root))
 
 import torch
 import torchvision
@@ -12,12 +19,12 @@ from torchvision.models import ResNet50_Weights
 
 from src.model_wrappers import TorchModelWrapper
 
-from .configuration.loader import STUDY_DIR, read_config
-from .inputs.images import image_path, read_images
-from .integration.model import load_target_model, require_cuda
-from .inputs.preprocessing import load_image_tensor
-from .configuration.schemas import SelectedGroup, StudyConfig
-from .integration.schemas import ImagePrediction, PairCheck
+from experiments.initialization_study.configuration.loader import STUDY_DIR, read_config
+from experiments.initialization_study.inputs.images import image_path, read_images
+from experiments.initialization_study.integration.model import load_target_model, require_cuda
+from experiments.initialization_study.inputs.preprocessing import load_image_tensor
+from experiments.initialization_study.configuration.schemas import SelectedGroup, StudyConfig
+from experiments.initialization_study.integration.schemas import ImagePrediction, PairCheck
 
 
 ################## INPUT VALIDATION ##################

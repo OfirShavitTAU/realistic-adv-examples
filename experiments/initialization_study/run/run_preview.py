@@ -2,18 +2,25 @@
 
 import argparse
 import json
+import sys
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+
+# Support direct Play in PyCharm as well as python -m execution.
+if __package__ in (None, ""):
+    project_root = Path(__file__).resolve().parents[3]
+    sys.path.insert(0, str(project_root))
+
 from PIL import Image, ImageDraw
 
-from .configuration.loader import STUDY_DIR, read_config
-from .inputs.images import read_images
-from .inputs.preprocessing import spatial_transforms
-from .configuration.schemas import ImageRole, SelectedGroup, StudyConfig
-from .inputs.schemas import PreviewEntry
-from .validation import PlanError
+from experiments.initialization_study.configuration.loader import STUDY_DIR, read_config
+from experiments.initialization_study.inputs.images import read_images
+from experiments.initialization_study.inputs.preprocessing import spatial_transforms
+from experiments.initialization_study.configuration.schemas import ImageRole, SelectedGroup, StudyConfig
+from experiments.initialization_study.inputs.schemas import PreviewEntry
+from experiments.initialization_study.validation import PlanError
 
 
 ################## INPUTS ##################
