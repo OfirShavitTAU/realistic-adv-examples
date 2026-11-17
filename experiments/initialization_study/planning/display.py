@@ -23,12 +23,18 @@ from .schemas import PlannedJob
     @param config_path: The configuration file used for this plan.
     @type run_dir: Path
     @param run_dir: A preview of the future output directory; it is not created.
+    @type plan_only: bool
+    @param plan_only: Whether only planning was requested.
 """
 def print_plan(
     config: StudyConfig, selected: list[SelectedGroup], jobs: list[PlannedJob],
-    warnings: list[str], config_path: Path, run_dir: Path
+    warnings: list[str], config_path: Path, run_dir: Path, plan_only: bool = True
 ) -> None:
-    print("PLAN ONLY - no model, attacks, or output directories are created.")
+    if plan_only:
+        print("PLAN ONLY - no model, attacks, or output directories are created.")
+    else:
+        print("EXECUTION REQUESTED - GPU-only HSJA; disk output persistence is not implemented yet.")
+
     print("Config: " + str(config_path.resolve()))
     print("Future output: " + str(run_dir))
     print("Model for execution stage: torchvision ResNet-50 / IMAGENET1K_V1")

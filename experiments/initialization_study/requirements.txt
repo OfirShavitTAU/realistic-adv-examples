@@ -1,5 +1,5 @@
 # Use Python 3.10, as in the original research project.
-# Dependencies for planning, preprocessing previews, and GPU-only preflight predictions.
+# Dependencies for planning, previews, GPU-only preflight, and the original HSJA adapter.
 # Model inference requires a CUDA-enabled PyTorch installation and a compatible GPU driver.
 
 # Match the numerical and transform versions in the root requirements.txt.
@@ -12,3 +12,7 @@ Pillow>=9.0,<10.0
 
 # Asia/Jerusalem timezone data, including on Windows.
 tzdata
+
+# Original attack code and its package imports (same constraints as the research project).
+foolbox~=3.3.3
+torch_dct~=0.1.6

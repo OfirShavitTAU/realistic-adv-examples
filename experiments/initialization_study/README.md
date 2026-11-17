@@ -10,7 +10,7 @@ initialization_study/
     run/                         # Tool implementations; press Play on the chosen file
         run_preview.py           # Play to create image comparisons
         run_preflight.py         # Play for GPU-only model preparation checks
-        run_experiment.py        # Play to display the experiment plan
+        run_experiment.py        # Plan by default; --execute runs the GPU pipeline
     validation.py                # Shared checks and PlanError
     requirements.txt
     README.md
@@ -27,6 +27,8 @@ initialization_study/
         schemas.py               # Image preview entry types
     integration/
         model.py                 # Load the original TorchModelWrapper on a CUDA GPU
+        hsja.py                  # Call original HSJA with an image or random initialization
+        pipeline.py              # Load once, check inputs, seed and execute tasks
         schemas.py               # Prediction and preparation report types
     images/                      # Existing input images
     previews/                    # Generated comparisons (ignored by Git)
@@ -37,8 +39,8 @@ Each code subdirectory has an `__init__.py` package marker. The three runnable
 tools contain their own implementations under `run/`; there are no forwarding
 scripts or separate `pre_run` directory. Relative configuration and image paths
 still resolve against `initialization_study`, not against the `run` directory.
-A future `integration/hsja.py` will call the original HSJA implementation; attack
-execution is not connected yet.
+`integration/hsja.py` now delegates single-task calls to the original HSJA.
+The experiment runner plans by default and calls the GPU pipeline only with `--execute`.
 
 ## Python environment
 
@@ -56,10 +58,11 @@ The study requirements cover planning, previews, and GPU-only preflight predicti
 Pillow for images, torch/torchvision for transforms, NumPy compatible with the
 original project, and tzdata for Israel timestamps on systems without timezone data.
 The NumPy, torch, and torchvision constraints match the root requirements file.
-These study requirements do not replace the full research requirements for future
-attack execution; those dependencies will be added when the attack runner is implemented.
+The study requirements include Foolbox for the original attack and torch_dct because
+`src.attacks.__init__` imports GeoDA even when selecting HSJA. The full root requirements
+are still needed for unrelated research entry points and models.
 
-## Current stage: plan only
+## Planning (default mode)
 
 Run from the repository root, using the repository's virtual environment:
 
@@ -73,7 +76,7 @@ It does **not** import PyTorch, download weights, run attacks, or create results
 Pillow is used to verify images and is included in the study requirements.
 
 Edit `config.json`: `groups` defines the groups directly, with a `family`, a
-nonempty `source` list, and a nonempty `initializations` list of image paths:
+nonempty `source` list and a nonempty `initializations` list of image paths:
 
 ```json
 {
@@ -122,7 +125,7 @@ project's Python 3.10 virtual environment, and press Play:
 | --- | --- |
 | `run_preview.py` | Save original/cropped image comparisons; no GPU needed. |
 | `run_preflight.py` | Check predictions and initialization pairs; CUDA GPU required. |
-| `run_experiment.py` | Validate inputs and display the experiment plan; no attacks yet. |
+| `run_experiment.py` | Display the plan by default; add `--execute` in run parameters to execute on GPU. |
 
 There is no menu or code setting to change. Each file contains its tool's own
 implementation and uses this study's `config.json` by default. The tools support
@@ -180,10 +183,89 @@ whereas this study reads explicit image paths from the configuration. The small
 loader reproduces the ResNet branch's construction without its DataParallel layer.
 No files in `src` or the original `main.py` are changed.
 
-Attack execution is not connected yet. It will call the original `HSJA.hsja`
-with the configured initialization through `target_image`, or None for the original
-random baseline, keeping `target_label=None` for untargeted execution. Gradient
-estimation, searches, updates, and stopping remain in the original attack code.
+The adapter now calls the original `HSJA.hsja` with the configured initialization
+through `target_image`, or None for the original random baseline, keeping
+`target_label=None` for untargeted execution. Gradient estimation, searches,
+updates, query counting, and stopping remain in the original attack code.
+
+## Original HSJA adapter
+
+`integration/hsja.py` exposes `create_hsja(settings, norm)` and
+`run_hsja(model, source, source_label, settings, norm, initialization=None)`.
+A fresh original attack is created per call. Both image inputs use shape
+`(1, 3, 224, 224)`, float32 raw pixels in [0, 1], on the model's CUDA GPU; the adapter
+removes only the initialization batch dimension to match the internal HSJA interface.
+The label is a `torch.long` tensor of shape `(1,)` on the same GPU.
+
+The adapter maps configured budgets and iterations to the original constructor.
+Other settings use the original defaults: continuous pixels, [0, 1] bounds,
+binary boundary search, HSJA gradient estimation, and geometric step-size search.
+It forwards those settings explicitly to the internal method, matching the original
+`__call__` path. It returns the original five-element tuple unchanged.
+
+Source ground-truth validation remains pending. The low-level adapter still expects its caller to check
+source and initialization predictions; shape/device checks do not replace eligibility.
+Seed setup and orchestration are connected in `integration/pipeline.py`. Independent
+result verification, effective-parameter recording, and result persistence remain pending.
+Original budgets can be exceeded because HSJA checks them at iteration boundaries;
+the returned success flag is not independent verification or a distance threshold.
+
+`run/run_experiment.py` prints the plan by default; `--execute` invokes the adapter
+through the pipeline. Importing the adapter does not load a model or run an attack. Isolated delegation checks use mocked tensors and
+replace the original optimization method; they require no GPU and execute no model:
+
+```bash
+.venv/bin/python -m unittest experiments.initialization_study.tests.test_hsja_adapter
+```
+
+## GPU execution pipeline (stage 3)
+
+Execution is connected. Source ground-truth validation, independent final-result
+verification, and persistence remain pending. The default remains planning only.
+To explicitly execute on the GPU VM, use:
+
+```bash
+.venv/bin/python -m experiments.initialization_study.run.run_experiment --execute --device cuda:0
+```
+
+In PyCharm, the same options can be entered in the script's run parameters. No
+execution is triggered merely by importing a module or running without `--execute`.
+
+The pipeline performs these steps:
+
+1. Require the selected CUDA GPU, then validate group image files.
+2. Load the original model wrapper once for the whole experiment.
+3. Reuse the standalone preflight functions to predict each unique image once and
+   check source/initialization pairs. Count preparation queries separately.
+4. Iterate over the already planned tasks, preserving group, norm, and seed choices.
+5. Skip image initializations predicted as the source class; random baselines remain eligible.
+6. For each eligible task, load raw tensors onto the GPU, reset actual model-query
+   counting, and seed Python, NumPy, PyTorch, and CUDA with the task's seed.
+7. Call the adapter, which constructs a fresh original HSJA instance. Image and
+   random initialization paths stay untargeted.
+8. Keep the exact returned output pixels on CPU to avoid accumulating image tensors
+   on the GPU between tasks, while retaining original counters and the success flag.
+9. Print per-task status, actual model queries, elapsed task time, and a final summary.
+
+Task time includes tensor preparation and device synchronization, not just the HSJA
+call. Seeds are repeatable on a fixed setup, not a guarantee across different GPUs
+or software versions. Expected task failures are recorded with their consumed queries
+and the pipeline proceeds to later tasks; KeyboardInterrupt is not swallowed.
+Setup failures stop the pipeline. The command exits with an error status if any task
+failed, but skipped tasks are not errors.
+
+**Current limitations:** a `completed` task means HSJA returned, not independently
+verified attack success. Attack reference labels currently come from source predictions, not verified ground truth. The original counter and actual model-query count are both
+available, and may differ; final accounting checks are pending. No result files,
+tensors, images, or summary CSV are saved yet. CLI outcomes are lost on process exit.
+Programmatic callers can retain the returned `PipelineResult` from `run_pipeline`.
+Full experimental runs should wait for the persistence stage.
+
+The isolated adapter and pipeline checks execute mocked calls only:
+
+```bash
+.venv/bin/python -m unittest experiments.initialization_study.tests.test_hsja_adapter experiments.initialization_study.tests.test_pipeline
+```
 
 ## GPU-only model preflight
 
@@ -216,11 +298,9 @@ original zero-based ImageNet class IDs and names and checks whether each configu
 initialization changes its source's predicted class. Norms and seeds do not repeat
 these deterministic preparation predictions. Random baselines are not sampled.
 
-**Source correctness is not yet verified:** the configuration has no explicit
-source ground-truth labels. Reports mark `source_label_status` as `not_checked`.
-A pair changing predicted class alone does not establish eligibility for a study
-requiring correctly classified sources. Folder names are not treated as verified
-labels. Explicit ground-truth labels and their validation remain a separate step.
+Source ground-truth labels are not yet checked. Reports mark source-label status
+as `not_checked`. A different initialization prediction alone does not establish
+that the source was correctly classified; label validation remains pending.
 
 Reports are saved under `preflight_reports/preflight-<Israel timestamp>/report.json`
 with the configuration, model weights, device, software versions, predictions,
@@ -253,4 +333,5 @@ The spelling `-atttack` is intentional. Norm/seed subdirectories prevent overwri
 Source labels and actual model predictions are separate from folder names. Execution
 must validate source labels and ensure initializations change the original class.
 Per-attack metrics, precise tensors, and query traces will be kept separately from
-the image tree. Attack execution and its result storage are not implemented at this stage.
+the image tree. Attack execution is connected with `--execute`; this result storage
+and independent final-result verification are not implemented yet.
