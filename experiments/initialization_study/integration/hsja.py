@@ -1,4 +1,4 @@
-"""Minimal GPU-only adapter to the researchers' original untargeted HSJA."""
+"""Minimal device-aware adapter to the researchers' original untargeted HSJA."""
 
 from typing import TypeAlias
 
@@ -44,7 +44,7 @@ def create_hsja(settings: AttackConfig, norm: Norm) -> HSJA:
 ################## INPUT CONTRACT ##################
 
 """
-    Checks single-image shapes, dtypes, and placement on the model's CUDA GPU.
+    Checks single-image shapes, dtypes, and placement on the model's selected CPU or CUDA device.
     Images must contain raw [0, 1] pixels shaped (1, 3, 224, 224); labels use shape (1,).
     Source correctness and initialization predictions must be checked by the caller.
 """
@@ -52,17 +52,17 @@ def validate_inputs(
     model: TorchModelWrapper, source: torch.Tensor, source_label: torch.Tensor,
     initialization: torch.Tensor | None,
 ) -> None:
-    require(source.device.type == "cuda", "HSJA source must be on a CUDA GPU; CPU is disabled.")
+    require(source.device.type in ("cpu", "cuda"), "HSJA supports CPU or CUDA tensors only.")
     require(tuple(source.shape) == (1, 3, 224, 224), "HSJA expects exactly one source: (1, 3, 224, 224).")
     require(source.dtype == torch.float32, "HSJA source must use float32 raw pixels.")
-    require(next(model.parameters()).device == source.device, "Model and source must be on the same CUDA GPU.")
+    require(next(model.parameters()).device == source.device, "Model and source must be on the same device.")
 
     require(tuple(source_label.shape) == (1,), "HSJA expects one source label with shape (1,).")
     require(source_label.dtype == torch.long, "The source label must use torch.long.")
-    require(source_label.device == source.device, "Source label and image must be on the same GPU.")
+    require(source_label.device == source.device, "Source label and image must be on the same device.")
 
     if initialization is not None:
-        require(initialization.device == source.device, "Initialization and source must be on the same GPU.")
+        require(initialization.device == source.device, "Initialization and source must be on the same device.")
         require(initialization.shape == source.shape, "Initialization and source must have the same shape.")
         require(initialization.dtype == source.dtype, "Initialization and source must use the same dtype.")
 

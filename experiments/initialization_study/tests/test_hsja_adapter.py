@@ -1,4 +1,4 @@
-"""Check original-HSJA delegation using mocks instead of GPU computation."""
+"""Check original-HSJA delegation using mocks instead of model computation."""
 
 import unittest
 from unittest.mock import MagicMock, patch
@@ -13,7 +13,7 @@ from src.attacks.hsja import HSJA
 
 
 class HSJAAdapterTests(unittest.TestCase):
-    """Verify task settings, tensor layout, untargeted mode, and CPU rejection."""
+    """Verify task settings, tensor layout, untargeted mode, and device compatibility."""
 
     def setUp(self) -> None:
         config, _ = read_config(STUDY_DIR / "config.json")
@@ -63,13 +63,35 @@ class HSJAAdapterTests(unittest.TestCase):
                 self.assertIs(arguments["distance"], l2)
                 model.predict_label.assert_not_called()
 
-    def test_cpu_rejected_before_attack(self) -> None:
+    def test_cpu_tensors_delegate_without_changing_original_attack(self) -> None:
         source = self.image()
         source.device = torch.device("cpu")
+        label = self.image()
+        label.device = source.device
+        label.shape = torch.Size((1,))
+        label.dtype = torch.long
+        model = MagicMock()
+        parameter = MagicMock()
+        parameter.device = source.device
+        model.parameters.return_value = iter([parameter])
+
+        with patch.object(HSJA, "hsja", return_value=object()) as original_call:
+            result = hsja.run_hsja(model, source, label, self.settings, "l2")
+            self.assertIs(result, original_call.return_value)
+            self.assertIs(original_call.call_args.kwargs["sample"], source)
+            self.assertIsNone(original_call.call_args.kwargs["target_label"])
+
+    def test_model_device_mismatch_rejected_before_attack(self) -> None:
+        source = self.image()
+        source.device = torch.device("cpu")
+        model = MagicMock()
+        parameter = MagicMock()
+        parameter.device = torch.device("cuda:0")
+        model.parameters.return_value = iter([parameter])
 
         with patch.object(hsja, "create_hsja") as create:
             with self.assertRaises(PlanError):
-                hsja.run_hsja(MagicMock(), source, MagicMock(), self.settings, "l2")
+                hsja.run_hsja(model, source, MagicMock(), self.settings, "l2")
             create.assert_not_called()
 
     def test_invalid_initialization_rejected(self) -> None:

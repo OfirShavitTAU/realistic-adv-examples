@@ -11,7 +11,7 @@ from .schemas import PlannedJob
 
 """
     Displays the configuration, planned tasks, warnings, and future output paths.
-    The output directory is only a preview and is not created here.
+    The output directory is displayed here; only the execution pipeline creates it.
 """
 def print_plan(
     config: StudyConfig, selected: list[SelectedGroup], jobs: list[PlannedJob],
@@ -20,7 +20,7 @@ def print_plan(
     if plan_only:
         print("PLAN ONLY - no model, attacks, or output directories are created.")
     else:
-        print("EXECUTION REQUESTED - GPU-only HSJA; disk output persistence is not implemented yet.")
+        print("EXECUTION REQUESTED - HSJA with per-task result storage.")
 
     print("Config: " + str(config_path.resolve()))
     print("Future output: " + str(run_dir))

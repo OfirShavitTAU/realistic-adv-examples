@@ -1,6 +1,7 @@
 # Use Python 3.10, as in the original research project.
-# Dependencies for planning, previews, GPU-only preflight, and the original HSJA adapter.
-# Model inference requires a CUDA-enabled PyTorch installation and a compatible GPU driver.
+# Dependencies for planning, previews, preflight, and the original HSJA adapter.
+# GPU mode (the default) requires CUDA-enabled PyTorch and a compatible driver.
+# CPU mode must be explicitly selected with --cpu.
 
 # Match the numerical and transform versions in the root requirements.txt.
 numpy~=1.23.3

@@ -9,7 +9,7 @@ initialization_study/
     config.json
     run/                         # Tool implementations; press Play on the chosen file
         run_preview.py           # Play to create image comparisons
-        run_preflight.py         # Play for GPU-only model preparation checks
+        run_preflight.py         # Model preparation checks; --cpu explicitly selects CPU
         run_experiment.py        # Plan by default; --execute runs the GPU pipeline
     validation.py                # Shared checks and PlanError
     requirements.txt
@@ -26,13 +26,17 @@ initialization_study/
         preprocessing.py         # Shared resize/crop and raw tensor preparation
         schemas.py               # Image preview entry types
     integration/
-        model.py                 # Load the original TorchModelWrapper on a CUDA GPU
+        model.py                 # Load the original model wrapper; CUDA default, --cpu optional
         hsja.py                  # Call original HSJA with an image or random initialization
         pipeline.py              # Load once, check inputs, seed and execute tasks
         schemas.py               # Prediction and preparation report types
+    outputs/
+        writer.py                # Run snapshots, artifacts, and incremental summary
+        serialization.py         # Atomic JSON, CSV, and exact tensor writes
     images/                      # Existing input images
     previews/                    # Generated comparisons (ignored by Git)
     preflight_reports/           # Generated preparation reports (ignored by Git)
+    results/                     # Generated experiment runs (ignored by Git)
 ```
 
 Each code subdirectory has an `__init__.py` package marker. The three runnable
@@ -54,7 +58,7 @@ python3.10 -m venv .venv
 
 If `.venv` already exists with Python 3.10, use only the installation command.
 On Windows, use `py -3.10 -m venv .venv` and `.venv\Scripts\python.exe`.
-The study requirements cover planning, previews, and GPU-only preflight predictions:
+The study requirements cover planning, previews, and preflight predictions:
 Pillow for images, torch/torchvision for transforms, NumPy compatible with the
 original project, and tzdata for Israel timestamps on systems without timezone data.
 The NumPy, torch, and torchvision constraints match the root requirements file.
@@ -152,13 +156,13 @@ project's Python 3.10 virtual environment, and press Play:
 | File | Action |
 | --- | --- |
 | `run_preview.py` | Save original/cropped image comparisons; no GPU needed. |
-| `run_preflight.py` | Check predictions and initialization pairs; CUDA GPU required. |
+| `run_preflight.py` | Check predictions and initialization pairs; CUDA default, `--cpu` for CPU. |
 | `run_experiment.py` | Display the plan by default; add `--execute` in run parameters to execute on GPU. |
 
 There is no menu or code setting to change. Each file contains its tool's own
 implementation and uses this study's `config.json` by default. The tools support
 direct file execution even with a different working directory and accept their
-underlying tool's command-line arguments. Preflight stays GPU-only.
+underlying tool's command-line arguments. Model inference defaults to CUDA; CPU requires `--cpu`.
 
 They can also be run as modules from the repository root:
 
@@ -221,9 +225,9 @@ updates, query counting, and stopping remain in the original attack code.
 `integration/hsja.py` exposes `create_hsja(settings, norm)` and
 `run_hsja(model, source, source_label, settings, norm, initialization=None)`.
 A fresh original attack is created per call. Both image inputs use shape
-`(1, 3, 224, 224)`, float32 raw pixels in [0, 1], on the model's CUDA GPU; the adapter
+`(1, 3, 224, 224)`, float32 raw pixels in [0, 1], on the model's selected device; the adapter
 removes only the initialization batch dimension to match the internal HSJA interface.
-The label is a `torch.long` tensor of shape `(1,)` on the same GPU.
+The label is a `torch.long` tensor of shape `(1,)` on the same device.
 
 The adapter maps configured budgets and iterations to the original constructor.
 Other settings use the original defaults: continuous pixels, [0, 1] bounds,
@@ -234,8 +238,9 @@ It forwards those settings explicitly to the internal method, matching the origi
 Automatic class-folder labels and source-correctness validation are now
 enforced by the pipeline. The low-level adapter still expects its caller to check
 source and initialization predictions; shape/device checks do not replace eligibility.
-Seed setup and orchestration are connected in `integration/pipeline.py`. Independent
-result verification, effective-parameter recording, and result persistence remain pending.
+Seed setup, orchestration, and incremental storage are connected in `integration/pipeline.py`.
+Effective initial parameters are saved with each run. Independent final-result verification
+and query-accounting validation remain pending.
 Original budgets can be exceeded because HSJA checks them at iteration boundaries;
 the returned success flag is not independent verification or a distance threshold.
 
@@ -247,10 +252,10 @@ replace the original optimization method; they require no GPU and execute no mod
 .venv/bin/python -m unittest experiments.initialization_study.tests.test_hsja_adapter
 ```
 
-## GPU execution pipeline (stage 3)
+## Execution pipeline (stage 3)
 
-Execution and automatic class-folder label checks are connected. Independent final-result
-verification and persistence (step 4) remain pending. The default remains planning only.
+Execution, automatic class-folder label checks, and incremental storage are connected.
+Independent final-result verification and query-accounting validation remain pending. The default remains planning only.
 To explicitly execute on the GPU VM, use:
 
 ```bash
@@ -262,24 +267,28 @@ execution is triggered merely by importing a module or running without `--execut
 
 The pipeline performs these steps:
 
-1. Require the selected CUDA GPU, then validate group image files.
-2. Load the original model wrapper once for the whole experiment.
+1. Require the selected CUDA GPU unless `--cpu` is explicit, validate inputs, and create a new output
+   directory with configuration, parameter/environment metadata, and pending summary rows.
+2. Copy the original input files into the output tree, then load the original model
+   wrapper once for the whole experiment.
 3. Reuse the standalone preflight functions to predict each unique image once and
    compare each source prediction with its class-folder ground truth, and check pair
-   eligibility. Count preparation queries separately.
+   eligibility. Save the preparation report and count its queries separately.
 4. Iterate over the already planned tasks, preserving group, norm, and seed choices.
 5. Skip every task of a source predicted incorrectly, including all its random
    baselines, norms, and seeds. For correct sources, skip only image initializations
    predicted as the source class; random baselines remain eligible.
-6. For each eligible task, load raw tensors onto the GPU, reset actual model-query
-   counting, and seed Python, NumPy, PyTorch, and CUDA with the task's seed.
+6. For each eligible task, load raw tensors onto the selected device, reset actual model-query
+   counting, and seed Python, NumPy, and PyTorch with the task's seed (also CUDA in GPU mode).
 7. Call the adapter, which constructs a fresh original HSJA instance. Image and
    random initialization paths stay untargeted.
-8. Keep the exact returned output pixels on CPU to avoid accumulating image tensors
-   on the GPU between tasks, while retaining original counters and the success flag.
-9. Print per-task status, actual model queries, elapsed task time, and a final summary.
+8. Keep the exact returned output pixels on CPU while retaining original counters
+   and the success flag.
+   Save exact source/initialization tensors, output tensors, display PNGs, and query history.
+9. Update the summary CSV and run state after every task, including skipped and failed
+   tasks, then print a final summary and the output directory.
 
-Task time includes tensor preparation and device synchronization, not just the HSJA
+Task time includes tensor preparation and, in GPU mode, device synchronization, not just the HSJA
 call. Seeds are repeatable on a fixed setup, not a guarantee across different GPUs
 or software versions. Expected task failures are recorded with their consumed queries
 and the pipeline proceeds to later tasks; KeyboardInterrupt is not swallowed.
@@ -289,41 +298,55 @@ failed, but skipped tasks are not errors.
 **Current limitations:** a `completed` task means HSJA returned, not independently
 verified attack success. Attack reference labels are the class-folder true labels, after
 checking that cached source predictions match them. The original counter and actual model-query count are both
-available, and may differ; final accounting checks are pending. No result files,
-tensors, images, or summary CSV are saved yet. CLI outcomes are lost on process exit.
-Programmatic callers can retain the returned `PipelineResult` from `run_pipeline`.
-Full experimental runs should wait for the persistence stage.
+available, and may differ; final accounting checks are pending. Source/pair eligibility
+is checked, but final prediction and independent L2/Linf fields remain `not_checked`
+or blank. Programmatic callers also receive a `PipelineResult` containing outcomes
+and the saved output directory. GPU execution still needs an actual pilot run.
 
-The isolated adapter and pipeline checks execute mocked calls only:
+The isolated adapter and pipeline checks execute mocked calls only (no real model or attack):
 
 ```bash
 .venv/bin/python -m unittest experiments.initialization_study.tests.test_hsja_adapter experiments.initialization_study.tests.test_pipeline experiments.initialization_study.tests.test_source_labels
 ```
 
-## GPU-only model preflight
+## Model preflight
 
-Model inference must run on a CUDA GPU. CPU fallback is disabled. The development
-VM without a GPU can still use the planner and image preview, but cannot run model
-preflight. On the GPU VM, use a CUDA-enabled torch/torchvision installation matching
-the version constraints and a compatible NVIDIA driver.
+Model inference defaults to CUDA, with no automatic CPU fallback. Without `--cpu`,
+unavailable CUDA or an invalid GPU index stops execution before model construction,
+weight downloads, or creation of an experiment output directory. This checks whether
+PyTorch can use the GPU, not merely whether hardware is physically installed.
 
-Run only when ready on the GPU VM, from the repository root:
+For the GPU VM, use CUDA-enabled torch/torchvision matching the version constraints
+and a compatible NVIDIA driver. Select a GPU with `--device cuda:0`. CPU mode is
+explicitly supported for small end-to-end checks on the development VM:
 
 ```bash
-.venv/bin/python -m experiments.initialization_study.run.run_preflight --device cuda:0
+# Preparation predictions only, explicitly on CPU:
+.venv/bin/python -m experiments.initialization_study.run.run_preflight --cpu
+
+# Actual attack pipeline with per-task storage, explicitly on CPU:
+.venv/bin/python -m experiments.initialization_study.run.run_experiment --execute --cpu
 ```
 
-An alternative configuration can be passed with `--config`. The command rejects a
-CPU device or unavailable CUDA GPU before constructing the model or downloading
-weights. The first successful GPU invocation may download the V1 weights into the
-standard torchvision cache. Importing these modules does not load the model.
+In PyCharm, put `--cpu` (and `--execute` for the experiment) in the Run configuration's
+Parameters field. Without those options, pressing Play on the experiment still plans
+only. `--cpu` and `--device` are mutually exclusive. Preview needs neither option.
+The first model load on either device may download V1 weights if not cached.
+No CPU fallback occurs when a GPU run fails.
+
+The original model wrapper's constructor hardcodes `.cuda()` for supplied normalization
+statistics. Our loader constructs that same wrapper without statistics, then assigns
+the original mean/std on the selected device. Its preprocessing, prediction and query
+counting methods are reused unchanged; no researchers' source files are edited.
+CPU runs use CPU RNG seeding and skip CUDA synchronization and CUDA-specific settings.
+Run metadata records the actual selected device, and CPU reports have no GPU name.
 
 The target is torchvision ResNet-50 with `ResNet50_Weights.IMAGENET1K_V1` in eval
 mode, without gradient tracking or DataParallel. Images use RGB conversion,
 `Resize(256)`, `CenterCrop(224)`, and `ToTensor`. Raw tensors remain in [0, 1];
 The original `TorchModelWrapper` handles ImageNet normalization, label prediction,
 and query counting. Those operations are not reimplemented in our code. File decoding and
-image transforms use the host CPU; all network inference runs on the selected GPU.
+image transforms use the host CPU; all network inference runs on the explicitly selected device.
 
 All configured image paths are validated first. Each unique resolved image path
 is then predicted once, even if referenced by multiple groups. The report includes
@@ -344,30 +367,79 @@ pair checks, and preparation query count (one per evaluated image, not per batch
 No attacks are executed; attack queries are zero. These are separate preparation
 reports, not experiment results. Model and attack code in `src` remains unchanged.
 
-## Output contract for the execution stage
+## Saved experiment output
 
-Actual runs will create `results/experiment-YYYY-MM-DD_HH-MM-SS-microseconds/` using
-`Asia/Jerusalem` time. The planner displays a preview name only. The execution stage
-will generate the timestamp when execution starts. Windows can sort these names
-chronologically. On Windows, timezone support may require the `tzdata` package.
+Executing with `--execute` creates a new directory using Israel time. Plan-only mode
+creates no output. An existing run directory is never reused or overwritten.
 
 ```text
-results/experiment-<timestamp>/
-    config.json
-    run_info.json
-    summary.csv
-    data/...
-    images/<family>/<group>/
-        source/<source files>
-        initializations/<initialization files>
-        results/<source stem>/<norm>_seed_<seed>/
-            <initialization stem>-atttack.png
-            random-atttack.png
+results/
+    experiment-YYYY-MM-DD_HH-MM-SS-microseconds/
+        config.json
+        run_info.json
+        summary.csv
+        data/
+            plan.json
+            input_manifest.json
+            preflight.json
+            task-000001/
+                task.json
+                source.pt
+                initialization.pt
+                output.pt
+                queries.json
+            task-000002/...
+        images/<family>/<group>/
+            source/<original files>
+            initializations/<original files>
+            results/<source stem>/<norm>_seed_<seed>/
+                <initialization stem>-atttack.png
+                random-atttack.png
 ```
 
-The spelling `-atttack` is intentional. Norm/seed subdirectories prevent overwrites.
-Source labels and actual model predictions are separate from folder names. Execution
-must validate source labels and ensure initializations change the original class.
-Per-attack metrics, precise tensors, and query traces will be kept separately from
-the image tree. Attack execution is connected with `--execute`; this result storage
-and independent final-result verification are not implemented yet.
+`config.json` snapshots the parsed configuration. `run_info.json` records the selected
+model/weights, package versions, Git commit and dirty state, device information,
+effective initial HSJA parameters, timestamps, preparation cost, and execution state.
+`input_manifest.json` records original paths, copied paths, and SHA-256 hashes. Input
+copies preserve the original bytes. `preflight.json` stores cached predictions,
+source correctness, pair eligibility, and preparation queries.
+
+Stable task IDs match plan order. `task.json` records the planned task, status,
+reason/error, original extra results, artifact links, and validation status. Exact
+raw tensors are saved with `torch.save` on CPU; they are not ImageNet-normalized.
+Source and initialization tensors contain the pixels supplied to the original attack.
+`output.pt` preserves the returned pixels exactly; display PNGs alone are clipped and
+rounded to 8-bit RGB. The intentional `-atttack` suffix and norm/seed folders are kept.
+Random tasks have no external `initialization.pt`; the original algorithm does not
+return its initial random noise. Skipped tasks have metadata without fake outputs.
+Errors retain any prepared input tensors and actual queries consumed. Original
+query history is marked unavailable if an exception prevents HSJA returning it.
+
+`queries.json` preserves original phase counts and distance history, including safe
+flags, best distances, and equivalent simulated-query counts. Nonfinite JSON numbers
+are represented by null. `summary.csv` uses UTF-8 with a BOM and stores input IDs,
+source and initialization predictions, norm/seed, status/reason, task time, actual
+model queries, reported total/unsafe/safe queries, reported distance/success, and
+artifact paths. Safe/unsafe names retain the researchers' semantics. Preparation
+cost is stored once per run, not duplicated into every task's attack cost.
+
+Independent final prediction, L2/Linf verification, and final success checks are not
+implemented yet. Their fields remain `not_checked` or blank; the original HSJA flag
+is explicitly named `attack_reported_success`. Validation-query count remains zero.
+A completed task means the original method returned, not a verified successful attack.
+
+Each task is marked `running` before it starts. Artifacts are saved before publishing
+its terminal summary row. JSON, tensor, and CSV replacements are atomic per file;
+there is no transaction spanning all files. A graceful interruption marks the run
+`interrupted`; setup/storage failures mark it `failed`. Unexpected termination may
+leave the active task `running` with later tasks `pending`, while earlier completed
+artifacts remain available. A task interrupted before returning cannot provide its
+final tensor or full query history. Storage failures stop further execution rather
+than silently discarding results. Automatic resume is not implemented.
+
+Storage checks use synthetic CPU tensors, mocked model/attack calls, and temporary
+directories only; they do not execute a real model or HSJA:
+
+```bash
+.venv/bin/python -m unittest discover -s experiments/initialization_study/tests
+```

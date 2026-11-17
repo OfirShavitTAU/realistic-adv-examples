@@ -3,3 +3,6 @@ previews/
 
 # GPU-only model preparation reports
 preflight_reports/
+
+# Generated experiment runs
+results/

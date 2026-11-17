@@ -1,4 +1,4 @@
-"""Plan the initialization study, or explicitly execute its GPU-only HSJA pipeline."""
+"""Plan the initialization study, or explicitly execute its HSJA pipeline (GPU by default)."""
 
 import argparse
 import json
@@ -23,8 +23,8 @@ from experiments.initialization_study.validation import PlanError
 ################## COMMAND LINE ##################
 
 """
-    Builds and displays the experiment plan; --execute also runs the GPU-only pipeline.
-    Planning is the default. Results are not yet saved to disk, and task errors cause a nonzero exit.
+    Builds and displays the experiment plan; --execute also runs the pipeline on GPU, or on CPU with --cpu.
+    Planning is the default. Execution saves each task, and task errors cause a nonzero exit.
 """
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -32,8 +32,10 @@ def main(argv: list[str] | None = None) -> None:
                         help="Absolute path or path relative to the study directory (not the working directory).")
 
     parser.add_argument("--execute", action="store_true",
-                        help="Run GPU-only preflight and HSJA tasks. Results are not yet saved to disk.")
-    parser.add_argument("--device", default="cuda", help="CUDA GPU for execution, for example cuda:0.")
+                        help="Run preflight and HSJA tasks, saving results after each task.")
+    device_options = parser.add_mutually_exclusive_group()
+    device_options.add_argument("--device", default="cuda", help="CUDA GPU for execution, for example cuda:0.")
+    device_options.add_argument("--cpu", action="store_true", help="Explicitly run on CPU instead of requiring CUDA.")
 
     args = parser.parse_args(argv)
     config_path = Path(args.config)
@@ -55,7 +57,7 @@ def main(argv: list[str] | None = None) -> None:
         return
 
     try:
-        outcome = run_pipeline(config, selected, jobs, args.device)
+        outcome = run_pipeline(config, selected, jobs, args.device, output_dir=run_dir, config_path=config_path, cpu=args.cpu)
     except (OSError, RuntimeError, ValueError) as error:
         parser.exit(1, "Execution failed: " + str(error) + "\n")
 

@@ -14,6 +14,9 @@ class PipelineTests(unittest.TestCase):
     """Cover preparation, task isolation, skipping, seeds, and error continuation."""
 
     def setUp(self) -> None:
+        writer_patch = patch.object(pipeline, "RunWriter")
+        self.writer = writer_patch.start().return_value
+        self.addCleanup(writer_patch.stop)
         self.config, self.selected = read_config(STUDY_DIR / "config.json")
         self.jobs, _ = build_plan(self.config, self.selected)
         self.device = torch.device("cuda:0")
@@ -41,7 +44,7 @@ class PipelineTests(unittest.TestCase):
         model.num_queries = 3
         outcomes = [pipeline.TaskResult(job, "completed", model_queries=10) for job in self.jobs]
 
-        with patch.object(pipeline, "require_cuda", return_value=self.device):
+        with patch.object(pipeline, "select_device", return_value=self.device):
             with patch.object(pipeline, "collect_groups", return_value=self.groups):
                 with patch.object(pipeline, "load_target_model", return_value=model) as load:
                     with patch.object(pipeline, "predict_images", return_value=self.predictions) as predict:
@@ -49,7 +52,7 @@ class PipelineTests(unittest.TestCase):
                             with patch.object(pipeline, "run_task", side_effect=outcomes) as run:
                                 result = pipeline.run_pipeline(self.config, self.selected, self.jobs)
 
-        load.assert_called_once_with("cuda:0")
+        load.assert_called_once_with("cuda:0", cpu=False)
         predict.assert_called_once()
         self.assertEqual(result.preparation_queries, 3)
         self.assertEqual(result.tasks, outcomes)
@@ -90,7 +93,7 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(result.status, "completed")
             self.assertEqual(result.model_queries, 17)
             self.assertIs(result.output[0], output_image.detach.return_value.cpu.return_value)
-            seed.assert_called_once_with(job["seed"])
+            seed.assert_called_once_with(job["seed"], self.device)
             self.assertEqual(adapter.call_args.args[4], job["norm"])
             self.assertEqual(prepare.call_count, 1 if job["initialization"] is None else 2)
 
@@ -121,7 +124,7 @@ class PipelineTests(unittest.TestCase):
         outcomes = [pipeline.TaskResult(self.jobs[0], "error", reason="test error")]
         outcomes += [pipeline.TaskResult(job, "completed") for job in self.jobs[1:]]
 
-        with patch.object(pipeline, "require_cuda", return_value=self.device):
+        with patch.object(pipeline, "select_device", return_value=self.device):
             with patch.object(pipeline, "collect_groups", return_value=self.groups):
                 with patch.object(pipeline, "load_target_model", return_value=model):
                     with patch.object(pipeline, "predict_images", return_value=self.predictions):
@@ -151,7 +154,7 @@ class PipelineTests(unittest.TestCase):
             with patch.object(pipeline.np.random, "seed") as numpy_seed:
                 with patch.object(pipeline.torch, "manual_seed") as torch_seed:
                     with patch.object(pipeline.torch.cuda, "manual_seed_all") as cuda_seed:
-                        pipeline.set_task_seed(42)
+                        pipeline.set_task_seed(42, self.device)
         for setter in (python_seed, numpy_seed, torch_seed, cuda_seed):
             setter.assert_called_once_with(42)
 

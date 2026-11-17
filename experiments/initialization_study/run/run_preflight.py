@@ -1,4 +1,4 @@
-"""Check configured image predictions and initialization pairs on a CUDA GPU."""
+"""Check configured image predictions and initialization pairs on GPU by default, or explicitly on CPU."""
 
 import argparse
 import json
@@ -21,7 +21,7 @@ from src.model_wrappers import TorchModelWrapper
 
 from experiments.initialization_study.configuration.loader import STUDY_DIR, get_source_label, read_config
 from experiments.initialization_study.inputs.images import image_path, read_images
-from experiments.initialization_study.integration.model import load_target_model, require_cuda
+from experiments.initialization_study.integration.model import load_target_model, select_device
 from experiments.initialization_study.inputs.preprocessing import load_image_tensor
 from experiments.initialization_study.configuration.schemas import SelectedGroup, StudyConfig
 from experiments.initialization_study.integration.schemas import ImagePrediction, PairCheck, SourceCheck, SourceLabelStatus
@@ -50,7 +50,7 @@ def collect_groups(
 ################## PREDICTIONS AND PAIR CHECKS ##################
 
 """
-    Predicts each unique resolved image path once on the loaded CUDA model.
+    Predicts each unique resolved image path once on the loaded model's selected device.
     Caches original ImageNet class IDs and names, including images shared across groups.
 """
 def predict_images(
@@ -152,13 +152,15 @@ def check_pairs(
 ################## COMMAND LINE ##################
 
 """
-    Runs GPU-only source and initialization checks and saves a separate JSON preparation report.
+    Runs source and initialization checks on GPU by default, or on CPU with --cpu and saves a separate JSON preparation report.
     Rejects unavailable CUDA before model loading; no attacks are executed.
 """
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="config.json", help="Path relative to the study directory or absolute.")
-    parser.add_argument("--device", default="cuda", help="CUDA GPU, for example cuda:0. CPU is disabled.")
+    device_options = parser.add_mutually_exclusive_group()
+    device_options.add_argument("--device", default="cuda", help="CUDA GPU, for example cuda:0.")
+    device_options.add_argument("--cpu", action="store_true", help="Explicitly run on CPU instead of requiring CUDA.")
     args = parser.parse_args(argv)
 
     config_path = Path(args.config)
@@ -168,10 +170,11 @@ def main(argv: list[str] | None = None) -> None:
 
     try:
         # Check GPU availability before any model creation or weight download.
-        device = require_cuda(args.device)
+        device = select_device(args.device, cpu=args.cpu)
+        print("Model device: " + str(device))
         config, selected = read_config(config_path)
         groups = collect_groups(config, selected)
-        model = load_target_model(str(device))
+        model = load_target_model(str(device), cpu=args.cpu)
 
         predictions = predict_images(model, groups)
         source_checks = check_sources(selected, groups, predictions)
@@ -182,7 +185,7 @@ def main(argv: list[str] | None = None) -> None:
             "model": "resnet50",
             "weights": "IMAGENET1K_V1",
             "device": str(device),
-            "gpu_name": torch.cuda.get_device_name(device),
+            "gpu_name": torch.cuda.get_device_name(device) if device.type == "cuda" else None,
             "torch_version": torch.__version__,
             "torchvision_version": torchvision.__version__,
             "preprocessing": ["RGB", "Resize(256)", "CenterCrop(224)", "ToTensor", "ImageNet normalization"],

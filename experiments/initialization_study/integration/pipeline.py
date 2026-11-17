@@ -1,4 +1,4 @@
-"""Orchestrate GPU preparation checks and original HSJA tasks without persistence."""
+"""Orchestrate model preparation checks, original HSJA tasks, and incremental output storage."""
 
 import random
 from dataclasses import dataclass
@@ -15,9 +15,10 @@ from ..configuration.loader import STUDY_DIR, get_source_label
 from ..configuration.schemas import SelectedGroup, StudyConfig
 from ..inputs.preprocessing import load_image_tensor
 from ..planning.schemas import PlannedJob
+from ..outputs.writer import RunWriter
 from ..run.run_preflight import check_pairs, check_sources, collect_groups, predict_images
 from .hsja import AttackOutput, run_hsja
-from .model import load_target_model, require_cuda
+from .model import load_target_model, select_device
 from .schemas import ImagePrediction, SourceCheck, SourceLabelStatus
 
 
@@ -35,28 +36,35 @@ class TaskResult:
     reason: str | None = None
     source_label_status: SourceLabelStatus = "correct"
     source_true_class_id: int | None = None
+    source_tensor: torch.Tensor | None = None
+    initialization_tensor: torch.Tensor | None = None
 
 
 @dataclass
 class PipelineResult:
-    """In-memory preparation predictions and task outcomes; no files are written."""
+    """Preparation predictions, outcomes, and the directory containing their saved artifacts."""
 
     preparation_queries: int
     predictions: dict[Path, ImagePrediction]
     tasks: list[TaskResult]
     sources: list[SourceCheck]
+    output_dir: Path | None = None
 
 
 ################## TASK PREPARATION ##################
 
 """
-    Seeds Python, NumPy, PyTorch, and CUDA for one planned task.
+    Seeds each task; CUDA-specific generators are used only in GPU mode.
 """
-def set_task_seed(seed: int) -> None:
+def set_task_seed(seed: int, device: torch.device) -> None:
     random.seed(seed)
     np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+    if device.type == "cuda":
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+    else:
+        # Seed the CPU generator directly, without invoking CUDA through torch.manual_seed.
+        torch.random.default_generator.manual_seed(seed)
 
 
 """
@@ -99,73 +107,109 @@ def run_task(
     # Keep each task's actual query count separate from preparation.
     model.num_queries = 0
     started = perf_counter()
+    source_pixels = None
+    initialization_pixels = None
 
     try:
-        source = load_image_tensor(source_path).to(device)
+        source_pixels = load_image_tensor(source_path)
+        source = source_pixels.to(device)
         initialization = None
 
         if initialization_path is not None:
-            initialization = load_image_tensor(initialization_path).to(device)
+            initialization_pixels = load_image_tensor(initialization_path)
+            initialization = initialization_pixels.to(device)
 
         source_label = torch.tensor([source_class], dtype=torch.long, device=device)
-        set_task_seed(job["seed"])
-        torch.cuda.synchronize(device)
+        set_task_seed(job["seed"], device)
+
+        if device.type == "cuda":
+            torch.cuda.synchronize(device)
 
         output = run_hsja(model, source, source_label, config["attack"], job["norm"], initialization)
-        torch.cuda.synchronize(device)
 
-        # Preserve exact pixels in CPU memory; disk storage is still pending.
+        if device.type == "cuda":
+            torch.cuda.synchronize(device)
+
+        # Keep exact pixels in CPU memory for immediate artifact storage.
         image, counter, distance, success, extra = output
         cpu_output: AttackOutput = (image.detach().cpu(), counter, distance, success, extra)
 
         return TaskResult(job, "completed", perf_counter() - started, model.num_queries, cpu_output,
-                          source_true_class_id=source_class)
+                          source_true_class_id=source_class, source_tensor=source_pixels,
+                          initialization_tensor=initialization_pixels)
     except (OSError, RuntimeError, ValueError, AssertionError) as error:
         return TaskResult(job, "error", perf_counter() - started, model.num_queries,
-                          reason=type(error).__name__ + ": " + str(error), source_true_class_id=source_class)
+                          reason=type(error).__name__ + ": " + str(error), source_true_class_id=source_class,
+                          source_tensor=source_pixels, initialization_tensor=initialization_pixels)
 
 
 ################## PIPELINE ##################
 
 """
-    Loads one CUDA model, runs preparation checks, and executes the planned tasks in order.
-    Separates preparation queries from attack queries and continues after recorded task errors.
-    Returns results in memory only; disk persistence and final-result verification are still pending.
+    Loads one model on CUDA or explicitly on CPU and saves each task incrementally.
+    Preparation, running tasks, errors, and interruptions are recorded separately.
+    Final-result verification is still pending; reported HSJA success is preserved as reported.
 """
 def run_pipeline(
     config: StudyConfig, selected: list[SelectedGroup], jobs: list[PlannedJob],
-    device_name: str = "cuda",
+    device_name: str = "cuda", output_dir: Path | None = None, config_path: Path | None = None,
+    cpu: bool = False,
 ) -> PipelineResult:
-    device = require_cuda(device_name)
+    device = select_device(device_name, cpu=cpu)
     groups = collect_groups(config, selected)
-    model = load_target_model(str(device))
-
-    predictions = predict_images(model, groups)
-    source_checks = check_sources(selected, groups, predictions)
-    check_pairs(selected, groups, predictions)
-    preparation_queries = model.num_queries
-
-    print("\nSource predictions checked against ImageNet labels inferred from class folders.")
-    print("Results are currently returned in memory only; output persistence and verification are pending.")
+    print("Execution device: " + str(device))
+    writer = RunWriter(config, jobs, str(device), output_dir, config_path)
+    model: TorchModelWrapper | None = None
+    preparation_complete = False
     tasks: list[TaskResult] = []
+    print("Output directory: " + str(writer.directory))
 
-    # Fixed seeds are repeatable on a fixed software/device setup, not a cross-device guarantee.
-    torch.backends.cudnn.benchmark = False
-    torch.backends.cudnn.deterministic = True
+    try:
+        writer.copy_inputs(selected, groups)
+        model = load_target_model(str(device), cpu=cpu)
+        predictions = predict_images(model, groups)
+        source_checks = check_sources(selected, groups, predictions)
+        pair_checks = check_pairs(selected, groups, predictions)
+        preparation_queries = model.num_queries
+        writer.save_preflight(predictions, source_checks, pair_checks, preparation_queries)
+        preparation_complete = True
 
-    for task_number, job in enumerate(jobs, 1):
-        print("\nTask {}/{}: {} / {} | {} | seed {} | {}".format(
-            task_number, len(jobs), job["family"], job["group"], job["norm"], job["seed"],
-            job["initialization"] or "random baseline",
-        ))
-        result = run_task(model, config, job, predictions, device)
-        tasks.append(result)
-        print("{} | model queries: {} | task time: {:.3f}s".format(
-            result.status, result.model_queries, result.elapsed_seconds,
-        ))
+        print("\nSource predictions checked against ImageNet labels inferred from class folders.")
+        print("Each task is saved immediately; independent final-result verification remains not_checked.")
 
-        if result.reason is not None:
-            print(result.reason)
+        # Fixed seeds are repeatable on a fixed setup, not a cross-device guarantee.
+        if device.type == "cuda":
+            torch.backends.cudnn.benchmark = False
+            torch.backends.cudnn.deterministic = True
+
+        for index, job in enumerate(jobs):
+            print("\nTask {}/{}: {} / {} | {} | seed {} | {}".format(
+                index + 1, len(jobs), job["family"], job["group"], job["norm"], job["seed"],
+                job["initialization"] or "random baseline",
+            ))
+            writer.start_task(index)
+            result = run_task(model, config, job, predictions, device)
+            writer.save_task(index, result)
+            tasks.append(result)
+            print("{} | model queries: {} | task time: {:.3f}s".format(
+                result.status, result.model_queries, result.elapsed_seconds,
+            ))
+
+            if result.reason is not None:
+                print(result.reason)
+
+        status = "completed_with_errors" if any(task.status == "error" for task in tasks) else "completed"
+        writer.finish(status)
+    except BaseException as error:
+        status = "interrupted" if isinstance(error, (KeyboardInterrupt, SystemExit)) else "failed"
+        partial_preparation = model.num_queries if model is not None and not preparation_complete else None
+
+        try:
+            writer.finish(status, type(error).__name__ + ": " + str(error), partial_preparation)
+        except OSError as storage_error:
+            print("Unable to update run status: " + str(storage_error))
+
+        raise
 
     print("\nPreparation queries: {} | Actual attack model queries: {}".format(
         preparation_queries, sum(task.model_queries for task in tasks),
@@ -175,5 +219,6 @@ def run_pipeline(
         sum(task.status == "skipped" for task in tasks),
         sum(task.status == "error" for task in tasks),
     ))
+    print("Saved results: " + str(writer.directory))
 
-    return PipelineResult(preparation_queries, predictions, tasks, source_checks)
+    return PipelineResult(preparation_queries, predictions, tasks, source_checks, writer.directory)
