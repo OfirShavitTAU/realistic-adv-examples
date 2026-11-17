@@ -471,7 +471,7 @@ directories only; they do not execute a real model or HSJA:
 ```
 
 
-## Opt-in real CPU E2E
+## Real CPU E2E
 
 `tests/e2e/e2e.json` is an editable experiment configuration. The test derives the
 expected tasks from all groups, sources, initializations, norms, seeds, and the
@@ -479,8 +479,8 @@ random-baseline setting. Shared images are counted once for preparation, regardl
 of how many groups or task repetitions reference them. Query limits follow the
 researchers' iteration-boundary checks and are not hard runtime limits.
 
-To run the real test, execute `tests/e2e/test_e2e.py` as a Python script in PyCharm
-or run:
+To run the real test, press Play on `tests/e2e/test_e2e.py` in PyCharm (Python or
+unittest configuration; no environment setup required), or run:
 
 ```bash
 .venv/bin/python experiments/initialization_study/tests/e2e/test_e2e.py
@@ -507,11 +507,11 @@ rate, attack queries, and validation costs are checked against all summary rows.
 Independent distance verification remains pending.
 
 The `e2e` directory deliberately has no package marker so ordinary unittest discovery
-does not recurse into it. Import-based test collection also skips the test unless
-`RUN_INITIALIZATION_E2E=1` is explicitly set. If PyCharm selects a unittest run
-configuration for this file, add that environment variable to enable the real test.
+does not recurse into it. Selecting the E2E file explicitly runs it by default,
+including through PyCharm's unittest runner. `RUN_INITIALIZATION_E2E` defaults to 1
+in the test code; set it to 0 to disable E2E in a runner that collects this file.
 For explicit unittest execution:
 
 ```bash
-RUN_INITIALIZATION_E2E=1 .venv/bin/python -m unittest discover -s experiments/initialization_study/tests/e2e
+.venv/bin/python -m unittest discover -s experiments/initialization_study/tests/e2e
 ```

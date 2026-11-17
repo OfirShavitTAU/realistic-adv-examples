@@ -1,4 +1,4 @@
-"""Opt-in real CPU E2E for every group in e2e.json; direct run or RUN_INITIALIZATION_E2E=1."""
+"""Real CPU E2E for every group in e2e.json; enabled when this test file is selected."""
 
 import csv
 import json
@@ -17,7 +17,8 @@ STUDY_DIR = TEST_DIR.parents[1]
 PROJECT_ROOT = STUDY_DIR.parents[1]
 CONFIG_PATH = TEST_DIR / "e2e.json"
 TIMEOUT_SECONDS_PER_TASK = 600
-E2E_ENABLED = __name__ == "__main__" or os.environ.get("RUN_INITIALIZATION_E2E") == "1"
+# Enable Play in PyCharm without manual environment setup; an explicit 0 still disables the test.
+E2E_ENABLED = os.environ.get("RUN_INITIALIZATION_E2E", "1") == "1"
 
 # Support direct Play independently of PyCharm's working directory.
 if str(PROJECT_ROOT) not in sys.path:
@@ -43,7 +44,7 @@ def expected_run(config_path: Path) -> tuple[StudyConfig, list[PlannedJob], set[
     return config, jobs, paths
 
 
-@unittest.skipUnless(E2E_ENABLED, "Real E2E is opt-in: run this file directly or set RUN_INITIALIZATION_E2E=1.")
+@unittest.skipUnless(E2E_ENABLED, "Real E2E is disabled by RUN_INITIALIZATION_E2E; set it to 1 to enable.")
 class CPUExperimentE2E(unittest.TestCase):
     """Executes the configured CPU experiment and retains artifacts in the normal results directory."""
 
