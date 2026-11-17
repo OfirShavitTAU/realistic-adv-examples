@@ -1,20 +1,37 @@
 {
   "groups": {
-    "e2e": {
+    "group_1": {
       "family": "dogs",
       "source": [
-        "images/dogs/207_golden_retriever/ILSVRC2012_val_00034584.jfif"
+        "images/dogs/207_golden_retriever/ILSVRC2012_val_00039893.jfif"
       ],
       "initializations": [
-        "images/dogs/208_labrador_retriever/ILSVRC2012_val_00019169.jfif"
+        "images/dogs/208_labrador_retriever/ILSVRC2012_val_00043072.jfif",
+        "images/dogs/230_shetland_sheepdog/ILSVRC2012_val_00014923.jfif",
+        "images/dogs/231_collie/ILSVRC2012_val_00019767.jfif"
+      ]
+    },
+    "group_2": {
+      "family": "dogs",
+      "source": [
+        "images/dogs/231_collie/ILSVRC2012_val_00019767.jfif"
+      ],
+      "initializations": [
+        "images/dogs/230_shetland_sheepdog/ILSVRC2012_val_00027522.jfif",
+        "images/dogs/208_labrador_retriever/ILSVRC2012_val_00019169.jfif",
+        "images/dogs/207_golden_retriever/ILSVRC2012_val_00028946.jfif"
       ]
     }
   },
   "random_baseline": false,
   "attack": {
     "name": "hsja",
-    "norms": ["l2"],
-    "seeds": [0],
+    "norms": [
+      "l2"
+    ],
+    "seeds": [
+      0
+    ],
     "max_queries": 100,
     "max_unsafe_queries": 100,
     "max_iterations": 1

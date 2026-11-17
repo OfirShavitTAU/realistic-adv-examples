@@ -473,10 +473,11 @@ directories only; they do not execute a real model or HSJA:
 
 ## Opt-in real CPU E2E
 
-`tests/e2e/e2e.json` defines one golden-retriever source, one Labrador initialization,
-L2, seed 0, one HSJA iteration, and query budgets of 100. Random baseline is disabled.
-The researchers' budgets are checked at iteration boundaries, so these are not hard
-query limits and do not guarantee a short runtime.
+`tests/e2e/e2e.json` is an editable experiment configuration. The test derives the
+expected tasks from all groups, sources, initializations, norms, seeds, and the
+random-baseline setting. Shared images are counted once for preparation, regardless
+of how many groups or task repetitions reference them. Query limits follow the
+researchers' iteration-boundary checks and are not hard runtime limits.
 
 To run the real test, execute `tests/e2e/test_e2e.py` as a Python script in PyCharm
 or run:
@@ -487,15 +488,22 @@ or run:
 
 The test starts the public experiment command in a separate Python process with
 `--config <the E2E fixture> --execute --cpu`. It may download the V1 weights on first
-use. It has a 600-second process timeout and retains normal experiment artifacts in
+use. Its process timeout is 600 seconds per planned task and it retains artifacts in
 `results/experiment-<timestamp>` for inspection, including when assertions fail.
 A process timeout may leave partial output.
 
-It requires one completed task, CPU metadata, a summary row, a display PNG, exact
-output/input tensors, and recorded query history. A skipped source or initialization
-fails the test because it does not exercise the attack path. It also requires a checked final class, an explicit success/failure outcome, and
-one separately counted validation query. It accepts either verified classification
-outcome; this is an integration test, not a guarantee that one iteration succeeds.
+It checks the full configuration snapshot and plan, exact task identities, CPU
+metadata, unique preparation-query count, and one CSV row per planned task. Every
+eligible task must complete, save tensors/PNG/query history, and report a checked
+final class and separate validation query. Random baselines do not need an external
+initialization tensor. Either verified classification success or failure is accepted;
+this test does not guarantee a successful attack under small budgets.
+
+Skipped tasks are accepted only when cached preflight predictions justify the skip
+(an incorrect source or an initialization predicted as its source class). At least
+one task must actually complete; all-skipped configurations fail because no attack
+path was exercised. Task errors fail the test. Aggregated verified counts, success
+rate, attack queries, and validation costs are checked against all summary rows.
 Independent distance verification remains pending.
 
 The `e2e` directory deliberately has no package marker so ordinary unittest discovery
