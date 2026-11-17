@@ -170,7 +170,7 @@ class CPUExperimentE2E(unittest.TestCase):
         timeout = TIMEOUT_SECONDS_PER_TASK * max(1, len(jobs))
         command = [
             sys.executable, "-u", "-m", "experiments.initialization_study.run.run_experiment",
-            "--config", str(CONFIG_PATH), "--execute", "--cpu",
+            "--config", str(CONFIG_PATH), "--cpu",
         ]
         print("\nRunning real CPU E2E: {} tasks, {} unique images (timeout: {} seconds).".format(
             len(jobs), len(unique_inputs), timeout,

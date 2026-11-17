@@ -106,8 +106,33 @@ class DeviceTests(unittest.TestCase):
         with patch.object(run_experiment, 'run_pipeline') as execute:
             execute.return_value.tasks = []
             with redirect_stdout(io.StringIO()):
-                run_experiment.main(['--execute', '--cpu'])
+                run_experiment.main(['--cpu'])
             self.assertTrue(execute.call_args.kwargs['cpu'])
+
+    def test_experiment_default_execution(self) -> None:
+        with patch.object(run_experiment, 'run_pipeline') as execute:
+            execute.return_value.tasks = []
+            with redirect_stdout(io.StringIO()):
+                run_experiment.main([])
+            execute.assert_called_once()
+            self.assertEqual(execute.call_args.args[3], 'cuda')
+            self.assertFalse(execute.call_args.kwargs['cpu'])
+
+    def test_experiment_plan_only(self) -> None:
+        with patch.object(run_experiment, 'run_pipeline') as execute:
+            execute.return_value.tasks = []
+            with redirect_stdout(io.StringIO()):
+                run_experiment.main(['--plan-only'])
+            execute.assert_not_called()
+
+    def test_experiment_legacy_execute(self) -> None:
+        with patch.object(run_experiment, 'run_pipeline') as execute:
+            execute.return_value.tasks = []
+            with redirect_stdout(io.StringIO()):
+                run_experiment.main(['--execute'])
+            execute.assert_called_once()
+            self.assertEqual(execute.call_args.args[3], 'cuda')
+            self.assertFalse(execute.call_args.kwargs['cpu'])
 
     def test_cpu_preflight_report_has_no_gpu_name(self) -> None:
         groups = run_preflight.collect_groups(self.config, self.selected)

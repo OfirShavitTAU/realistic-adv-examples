@@ -23,14 +23,16 @@
       ]
     }
   },
-  "random_baseline": false,
+  "random_baseline": true,
   "attack": {
     "name": "hsja",
     "norms": [
-      "l2"
+      "l2",
+      "linf"
     ],
     "seeds": [
-      0
+      0,
+      1
     ],
     "max_queries": 100,
     "max_unsafe_queries": 100,

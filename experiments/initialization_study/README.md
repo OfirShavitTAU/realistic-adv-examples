@@ -10,7 +10,7 @@ initialization_study/
     run/                         # Tool implementations; press Play on the chosen file
         run_preview.py           # Play to create image comparisons
         run_preflight.py         # Model preparation checks; --cpu explicitly selects CPU
-        run_experiment.py        # Plan by default; --execute runs the GPU pipeline
+        run_experiment.py        # Run on GPU by default; --plan-only displays the plan
     validation.py                # Shared checks and PlanError
     requirements.txt
     README.md
@@ -45,7 +45,7 @@ tools contain their own implementations under `run/`; there are no forwarding
 scripts or separate `pre_run` directory. Relative configuration and image paths
 still resolve against `initialization_study`, not against the `run` directory.
 `integration/hsja.py` now delegates single-task calls to the original HSJA.
-The experiment runner plans by default and calls the GPU pipeline only with `--execute`.
+The experiment runner runs on GPU by default; `--plan-only` stops after planning.
 
 ## Python environment
 
@@ -67,18 +67,18 @@ The study requirements include Foolbox for the original attack and torch_dct bec
 `src.attacks.__init__` imports GeoDA even when selecting HSJA. The full root requirements
 are still needed for unrelated research entry points and models.
 
-## Planning (default mode)
+## Planning without execution
 
 Run from the repository root, using the repository's virtual environment:
 
 ```bash
-.venv/bin/python -m experiments.initialization_study.run.run_experiment
+.venv/bin/python -m experiments.initialization_study.run.run_experiment --plan-only
 ```
 
 This validates the JSON settings, decodes the selected images, and lists every planned
 source/initialization pair plus one random baseline per source, norm, and seed.
 It imports the pipeline dependencies but does **not** load a model, download weights,
-run attacks, or create results unless execution is explicitly requested.
+run attacks, or create results in this mode.
 Pillow is used to verify images and is included in the study requirements.
 
 Edit `config.json`: `groups` defines the groups directly, with a `family`, a
@@ -158,7 +158,7 @@ project's Python 3.10 virtual environment, and press Play:
 | --- | --- |
 | `run_preview.py` | Save original/cropped image comparisons; no GPU needed. |
 | `run_preflight.py` | Check predictions and initialization pairs; CUDA default, `--cpu` for CPU. |
-| `run_experiment.py` | Display the plan by default; add `--execute` in run parameters to execute on GPU. |
+| `run_experiment.py` | Run on GPU by default; add `--plan-only` to display the plan without execution. |
 
 There is no menu or code setting to change. Each file contains its tool's own
 implementation and uses this study's `config.json` by default. The tools support
@@ -245,8 +245,8 @@ independently; distance verification and query-accounting validation remain pend
 Original budgets can be exceeded because HSJA checks them at iteration boundaries;
 the returned success flag is not independent verification or a distance threshold.
 
-`run/run_experiment.py` prints the plan by default; `--execute` invokes the adapter
-through the pipeline. Importing the adapter does not load a model or run an attack. Isolated delegation checks use mocked tensors and
+`run/run_experiment.py` prints the plan and invokes the adapter through the pipeline
+by default. Use `--plan-only` to stop before execution. Importing the adapter does not load a model or run an attack. Isolated delegation checks use mocked tensors and
 replace the original optimization method; they require no GPU and execute no model:
 
 ```bash
@@ -257,15 +257,16 @@ replace the original optimization method; they require no GPU and execute no mod
 
 Execution, automatic class-folder label checks, and incremental storage are connected.
 Final classification is independently verified. Distance verification and query-accounting
-validation remain pending. The default remains planning only.
+validation remain pending. Execution on GPU is the default.
 To explicitly execute on the GPU VM, use:
 
 ```bash
-.venv/bin/python -m experiments.initialization_study.run.run_experiment --execute --device cuda:0
+.venv/bin/python -m experiments.initialization_study.run.run_experiment --device cuda:0
 ```
 
-In PyCharm, the same options can be entered in the script's run parameters. No
-execution is triggered merely by importing a module or running without `--execute`.
+In PyCharm, pressing Play runs the experiment on GPU. Add `--plan-only` in the
+script's run parameters to display the plan only. Importing the module does not
+start execution. The old `--execute` flag is still accepted for compatibility.
 
 The pipeline performs these steps:
 
@@ -328,12 +329,11 @@ explicitly supported for small end-to-end checks on the development VM:
 .venv/bin/python -m experiments.initialization_study.run.run_preflight --cpu
 
 # Actual attack pipeline with per-task storage, explicitly on CPU:
-.venv/bin/python -m experiments.initialization_study.run.run_experiment --execute --cpu
+.venv/bin/python -m experiments.initialization_study.run.run_experiment --cpu
 ```
 
-In PyCharm, put `--cpu` (and `--execute` for the experiment) in the Run configuration's
-Parameters field. Without those options, pressing Play on the experiment still plans
-only. `--cpu` and `--device` are mutually exclusive. Preview needs neither option.
+In PyCharm, put `--cpu` in the Run configuration's Parameters field to run on CPU.
+Without this option, pressing Play runs the experiment on GPU. `--cpu` and `--device` are mutually exclusive. Preview needs neither option.
 The first model load on either device may download V1 weights if not cached.
 No CPU fallback occurs when a GPU run fails.
 
@@ -372,7 +372,7 @@ reports, not experiment results. Model and attack code in `src` remains unchange
 
 ## Saved experiment output
 
-Executing with `--execute` creates a new directory using Israel time. Plan-only mode
+Executing creates a new directory using Israel time. Plan-only mode
 creates no output. An existing run directory is never reused or overwritten.
 
 ```text
@@ -487,7 +487,7 @@ unittest configuration; no environment setup required), or run:
 ```
 
 The test starts the public experiment command in a separate Python process with
-`--config <the E2E fixture> --execute --cpu`. It may download the V1 weights on first
+`--config <the E2E fixture> --cpu`. It may download the V1 weights on first
 use. Its process timeout is 600 seconds per planned task and it retains artifacts in
 `results/experiment-<timestamp>` for inspection, including when assertions fail.
 A process timeout may leave partial output.

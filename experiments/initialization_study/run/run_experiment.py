@@ -1,4 +1,4 @@
-"""Plan the initialization study, or explicitly execute its HSJA pipeline (GPU by default)."""
+"""Run the initialization study on GPU by default; --plan-only stops before execution."""
 
 import argparse
 import json
@@ -23,16 +23,20 @@ from experiments.initialization_study.validation import PlanError
 ################## COMMAND LINE ##################
 
 """
-    Builds and displays the experiment plan; --execute also runs the pipeline on GPU, or on CPU with --cpu.
-    Planning is the default. Execution saves each task, and task errors cause a nonzero exit.
+    Builds the plan and runs the pipeline on GPU, or on CPU with --cpu.
+    Use --plan-only to stop after planning. Execution saves each task; task errors cause a nonzero exit.
 """
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="config.json",
                         help="Absolute path or path relative to the study directory (not the working directory).")
 
-    parser.add_argument("--execute", action="store_true",
-                        help="Run preflight and HSJA tasks, saving results after each task.")
+    mode_options = parser.add_mutually_exclusive_group()
+    mode_options.add_argument("--plan-only", action="store_true",
+                              help="Display the plan without running the model or saving results.")
+    # Preserve existing launch configurations; execution is now the default.
+    mode_options.add_argument("--execute", action="store_true", help=argparse.SUPPRESS)
+
     device_options = parser.add_mutually_exclusive_group()
     device_options.add_argument("--device", default="cuda", help="CUDA GPU for execution, for example cuda:0.")
     device_options.add_argument("--cpu", action="store_true", help="Explicitly run on CPU instead of requiring CUDA.")
@@ -51,9 +55,9 @@ def main(argv: list[str] | None = None) -> None:
         parser.exit(1, "Planning failed: " + str(exc) + "\n")
 
     run_dir = STUDY_DIR / "results" / ("experiment-" + stamp)
-    print_plan(config, selected, jobs, warnings, config_path, run_dir, plan_only=not args.execute)
+    print_plan(config, selected, jobs, warnings, config_path, run_dir, plan_only=args.plan_only)
 
-    if not args.execute:
+    if args.plan_only:
         return
 
     try:
