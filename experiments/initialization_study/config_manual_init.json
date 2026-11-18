@@ -1,0 +1,97 @@
+{
+  "groups": {
+    "dogs_g1": {
+      "family": "dogs",
+      "source": [
+        "images/dogs/235_german_shepherd_dog/dogs_source_german_shepherd_ILSVRC2012_val_00014360.jfif"
+      ],
+      "initializations": [
+        "images/dogs/230_shetland_sheepdog/dogs_init_close_shetland_sheepdog_ILSVRC2012_val_00031875.jfif",
+        "images/dogs/229_old_english_sheepdog/dogs1_init_far_old_english_sheepdog_ILSVRC2012_val_00030240.jfif"
+      ]
+    },
+    "dogs_g2": {
+      "family": "dogs",
+      "source": [
+        "images/dogs/236_dobermann/dogs2_source_doberman_ILSVRC2012_val_00013033.jfif"
+      ],
+      "initializations": [
+        "images/dogs/234_rottweiler/dogs2_init_close_rottweiler_ILSVRC2012_val_00026388.jfif",
+        "images/dogs/151_chihuahua/dogs2_init_far_chiwawa_ILSVRC2012_val_00007057.jfif"
+      ]
+    },
+    "dogs_g3": {
+      "family": "dogs",
+      "source": [
+        "images/dogs/245_french_bulldog/dogs3_source_franch_bulldog_ILSVRC2012_val_00005126.jfif"
+      ],
+      "initializations": [
+        "images/dogs/254_pug/dogs3_init_close_pug_ILSVRC2012_val_00024249.jfif",
+        "images/dogs/233_bouvier_des_flandres/dogs3_init_far_bouvier_des_flandres_ILSVRC2012_val_00019671.jfif"
+      ]
+    },
+    "cats_g1": {
+      "family": "cats",
+      "source": [
+        "images/cats/281_tabby_cat/cats1_source_tabby_281_ILSVRC2012_val_00008876.jfif"
+      ],
+      "initializations": [
+        "images/cats/283_persian_cat/cats1_init_close_persian_ILSVRC2012_val_00002036.jfif",
+        "images/cats/290_jaguar/cats1_init_far_jaguar_ILSVRC2012_val_00045488.jfif"
+      ]
+    },
+    "cats_g2": {
+      "family": "cats",
+      "source": [
+        "images/cats/286_cougar/cats2_source_cougar_ILSVRC2012_val_00001888.jfif"
+      ],
+      "initializations": [
+        "images/cats/287_lynx/cats2_init_close_lynx_ILSVRC2012_val_00012958.jfif",
+        "images/cats/8_hen/cats3_init_far_hen_ILSVRC2012_val_00010208.jfif"
+      ]
+    },
+    "cars_g1": {
+      "family": "cars",
+      "source": [
+        "images/cars/436_station_wagon/cars1_source_station_wagon_ILSVRC2012_val_00007374.jfif"
+      ],
+      "initializations": [
+        "images/cars/511_convertible/cars1_init_close_convertible_ILSVRC2012_val_00019496.jfif",
+        "images/cars/569_garbage_truck/cars1_init_far_garbage_truck_ILSVRC2012_val_00006922.jfif"
+      ]
+    },
+    "cars_g2": {
+      "family": "cars",
+      "source": [
+        "images/cars/609_jeep/cars2_source_jeep_ILSVRC2012_val_00036304.jfif"
+      ],
+      "initializations": [
+        "images/cars/717_pickup_truck/cars2_init_close_pickup_ILSVRC2012_val_00025131.jfif",
+        "images/cars/670_motor_scooter/cars3_init_far_motor_scooter_ILSVRC2012_val_00016364.jfif"
+      ]
+    },
+    "cars_g3": {
+      "family": "cars",
+      "source": [
+        "images/cars/654_minibus/cars3_source_minibus_ILSVRC2012_val_00000793.jfif"
+      ],
+      "initializations": [
+        "images/cars/675_moving_truck_or_moving_van/cars3_init_close_moving_van_ILSVRC2012_val_00005882.jfif",
+        "images/cars/582_grocery_store_or_food_market/cars3_init_far_food_market_ILSVRC2012_val_00016284.jfif"
+      ]
+    }
+  },
+  "random_baseline": true,
+  "attack": {
+    "name": "hsja",
+    "norms": [
+      "l2"
+    ],
+    "seeds": [
+      0
+    ],
+    "max_queries": 10000,
+    "max_unsafe_queries": 10000,
+    "max_iterations": 500
+  }
+}

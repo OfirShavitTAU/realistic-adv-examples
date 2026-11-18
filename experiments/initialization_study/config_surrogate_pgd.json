@@ -1,0 +1,90 @@
+{
+  "groups": {
+    "dogs_g1": {
+      "family": "dogs",
+      "source": [
+        "images/dogs/235_german_shepherd_dog/dogs_source_german_shepherd_ILSVRC2012_val_00014360.jfif"
+      ],
+      "initializations": [
+        "images/dogs/235_german_shepherd_dog/dogs_source_german_shepherd_PGD_ILSVRC2012_val_00014360.png"
+      
+      ]
+    },
+    "dogs_g2": {
+      "family": "dogs",
+      "source": [
+        "images/dogs/236_dobermann/dogs2_source_doberman_ILSVRC2012_val_00013033.jfif"
+      ],
+      "initializations": [
+        "images/dogs/236_dobermann/dogs2_source_doberman_PGD_ILSVRC2012_val_00013033.png"
+      ]
+    },
+    "dogs_g3": {
+      "family": "dogs",
+      "source": [
+        "images/dogs/245_french_bulldog/dogs3_source_franch_bulldog_ILSVRC2012_val_00005126.jfif"
+      ],
+      "initializations": [
+        "images/dogs/245_french_bulldog/dogs3_source_franch_bulldog_PGD_ILSVRC2012_val_00005126.png"
+      ]
+    },
+    "cats_g1": {
+      "family": "cats",
+      "source": [
+        "images/cats/281_tabby_cat/cats1_source_tabby_281_ILSVRC2012_val_00008876.jfif"
+      ],
+      "initializations": [
+        "images/cats/281_tabby_cat/cats1_source_tabby_281_PGD_ILSVRC2012_val_00008876.png"
+      ]
+    },
+    "cats_g2": {
+      "family": "cats",
+      "source": [
+        "images/cats/286_cougar/cats2_source_cougar_ILSVRC2012_val_00001888.jfif"
+      ],
+      "initializations": [
+        "images/cats/286_cougar/cats2_source_cougar_PGD_ILSVRC2012_val_00001888.png"
+      ]
+    },
+    "cars_g1": {
+      "family": "cars",
+      "source": [
+        "images/cars/436_station_wagon/cars1_source_station_wagon_ILSVRC2012_val_00007374.jfif"
+      ],
+      "initializations": [
+        "images/cars/436_station_wagon/cars1_source_station_wagon_PGD_ILSVRC2012_val_00007374.png"
+      ]
+    },
+    "cars_g2": {
+      "family": "cars",
+      "source": [
+        "images/cars/609_jeep/cars2_source_jeep_ILSVRC2012_val_00036304.jfif"
+      ],
+      "initializations": [
+        "images/cars/609_jeep/cars2_source_jeep_PGD_ILSVRC2012_val_00036304.png"
+      ]
+    },
+    "cars_g3": {
+      "family": "cars",
+      "source": [
+        "images/cars/654_minibus/cars3_source_minibus_ILSVRC2012_val_00000793.jfif"
+      ],
+      "initializations": [
+        "images/cars/654_minibus/cars3_source_minibus_PGD_ILSVRC2012_val_00000793.png"
+      ]
+    }
+  },
+  "random_baseline": false,
+  "attack": {
+    "name": "hsja",
+    "norms": [
+      "l2"
+    ],
+    "seeds": [
+      0
+    ],
+    "max_queries": 10000,
+    "max_unsafe_queries": 10000,
+    "max_iterations": 500
+  }
+}

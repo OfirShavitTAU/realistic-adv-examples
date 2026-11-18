@@ -18,5 +18,5 @@ conda activate /home/sharifm/teaching/mlsec-0368-3423/ofirblechman/conda_envs/br
 
 echo "Running on host: $(hostname)"
 nvidia-smi
-python -c "import torch; print('CUDA available:', torch.cuda.is_available())"
+python -c "print('CUDA available:', torch.cuda.is_available())"
 python -u -m experiments.initialization_study.run.run_preview
